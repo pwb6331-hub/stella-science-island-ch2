@@ -1509,6 +1509,23 @@
       return MatCache[key];
     }
 
+    function getGlassMat(tintHex = 0xffffff, opacity = 0.42) {
+      const key = `glass_${tintHex}_${opacity}`;
+      if (!MatCache[key]) {
+        MatCache[key] = new THREE.MeshPhysicalMaterial({
+          color: tintHex,
+          transparent: true,
+          opacity: opacity,
+          roughness: 0.08,
+          metalness: 0.1,
+          transmission: 0.88,
+          ior: 1.48,
+          reflectivity: 0.6
+        });
+      }
+      return MatCache[key];
+    }
+
     // 註冊各島主圖塊（極簡高對比單行標題膠囊，移除重點/評量/影音小按鈕，點擊直接飛島並展開課程）
     function registerIslandHubPin(targetObj, offsetY, unitCode, titleText, borderClass) {
       const layer = document.getElementById('pins-layer');
@@ -1870,50 +1887,96 @@
     }
 
     // -------------------------------------------------------------------------
-    // 3D Q版黏土人物建構器 (Clay Character Builder)
+    // 3D Q版擬真黏土手辦人物建構器 (Detailed Miniature Clay Character Builder)
     // -------------------------------------------------------------------------
     function createClayCharacter(suitColor, hairColor, propType, metaData) {
       const charGroup = new THREE.Group();
 
-      // 頭部與五官
+      // 1. 頭部、生動五官、微腮紅與髮型
       const head = new THREE.Mesh(GeoCache.charHead, getClayMat(0xffedd5, 0.45, 0.05));
       head.position.y = 2.05;
       head.castShadow = true;
       charGroup.add(head);
 
+      // 蓬鬆立體分件髮型
       const hair = new THREE.Mesh(
-        new THREE.SphereGeometry(0.72, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.SphereGeometry(0.74, 18, 18, 0, Math.PI * 2, 0, Math.PI * 0.58),
         getClayMat(hairColor, 0.55, 0.05)
       );
-      hair.position.y = 2.12;
-      charGroup.add(hair);
+      hair.position.y = 2.14;
+      // 額前呆毛髮束
+      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 8), getClayMat(hairColor, 0.55, 0.05));
+      tuft.position.set(0, 2.82, 0.35);
+      tuft.rotation.x = 0.35;
+      charGroup.add(hair, tuft);
 
+      // 晶亮黑曜石眼眸與高光
       const eyeMat = getClayMat(0x0f172a, 0.2, 0.1);
       const leftEye = new THREE.Mesh(GeoCache.charEye, eyeMat);
-      leftEye.position.set(-0.22, 2.05, 0.6);
+      leftEye.position.set(-0.24, 2.08, 0.62);
       const rightEye = new THREE.Mesh(GeoCache.charEye, eyeMat);
-      rightEye.position.set(0.22, 2.05, 0.6);
-      charGroup.add(leftEye, rightEye);
+      rightEye.position.set(0.24, 2.08, 0.62);
+      // 少女感粉嫩腮紅
+      const blushMat = getClayMat(0xf472b6, 0.5, 0.05);
+      const leftBlush = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 10), blushMat);
+      leftBlush.rotation.x = Math.PI / 2;
+      leftBlush.position.set(-0.38, 1.95, 0.58);
+      const rightBlush = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 10), blushMat);
+      rightBlush.rotation.x = Math.PI / 2;
+      rightBlush.position.set(0.38, 1.95, 0.58);
+      charGroup.add(leftEye, rightEye, leftBlush, rightBlush);
 
-      // 身體與手腳
-      const body = new THREE.Mesh(GeoCache.charBody, getClayMat(suitColor, 0.48, 0.08));
+      // 科學家專屬圓框護目鏡 (Goggles with Glass Lenses)
+      const goggleMat = getClayMat(0x38bdf8, 0.25, 0.5);
+      const gL = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.038, 10, 20), goggleMat);
+      gL.position.set(-0.24, 2.08, 0.65);
+      const gR = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.038, 10, 20), goggleMat);
+      gR.position.set(0.24, 2.08, 0.65);
+      const gBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.16, 6), goggleMat);
+      gBridge.rotation.z = Math.PI / 2;
+      gBridge.position.set(0, 2.08, 0.66);
+      charGroup.add(gL, gR, gBridge);
+
+      // 2. 身體與專業白實驗袍（雙層層次：內搭襯衫 + 白色實驗長袍）
+      const labCoatMat = getClayMat(0xf8fafc, 0.38, 0.05); // 潔白實驗袍
+      const body = new THREE.Mesh(GeoCache.charBody, labCoatMat);
       body.position.y = 1.05;
       body.castShadow = true;
-      charGroup.add(body);
+      // 實驗袍翻領 (Collar)
+      const collarL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.38, 0.05), getClayMat(suitColor, 0.4, 0.05));
+      collarL.position.set(-0.16, 1.48, 0.38);
+      collarL.rotation.z = -0.3;
+      const collarR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.38, 0.05), getClayMat(suitColor, 0.4, 0.05));
+      collarR.position.set(0.16, 1.48, 0.38);
+      collarR.rotation.z = 0.3;
+      // 領帶/識別證
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.45, 0.04), getClayMat(suitColor, 0.3, 0.1));
+      tie.position.set(0, 1.32, 0.4);
+      // 口袋
+      const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.04), getClayMat(0xe2e8f0, 0.4, 0.05));
+      pocket.position.set(0.26, 0.95, 0.36);
+      charGroup.add(body, collarL, collarR, tie, pocket);
 
-      const leftArm = new THREE.Mesh(GeoCache.charLimb, getClayMat(suitColor, 0.48, 0.08));
-      leftArm.position.set(-0.68, 1.15, 0);
+      // 手臂（白袍袖管 + 膚色小手）
+      const leftArm = new THREE.Mesh(GeoCache.charLimb, labCoatMat);
+      leftArm.position.set(-0.7, 1.15, 0);
       leftArm.rotation.z = 0.35;
-      const rightArm = new THREE.Mesh(GeoCache.charLimb, getClayMat(suitColor, 0.48, 0.08));
-      rightArm.position.set(0.68, 1.15, 0.2);
+      const rightArm = new THREE.Mesh(GeoCache.charLimb, labCoatMat);
+      rightArm.position.set(0.7, 1.15, 0.2);
       rightArm.rotation.x = -0.6;
       charGroup.add(leftArm, rightArm);
 
-      // 手持教學道具
+      // 手持精緻教學道具
       if (propType === 'magnifier') {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.07, 10, 20), getClayMat(0x38bdf8, 0.3, 0.3));
-        ring.position.set(0.85, 1.45, 0.55);
-        charGroup.add(ring);
+        const magRing = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 12, 24), getClayMat(0xfbbf24, 0.25, 0.7)); // 金框
+        magRing.position.set(0.88, 1.48, 0.58);
+        const magLens = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 16), getGlassMat(0x38bdf8, 0.35)); // 透光鏡片
+        magLens.rotation.x = Math.PI / 2;
+        magLens.position.set(0.88, 1.48, 0.58);
+        const magHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.45, 10), getClayMat(0x78350f, 0.6, 0.1)); // 木柄
+        magHandle.position.set(0.76, 1.25, 0.58);
+        magHandle.rotation.z = 0.6;
+        charGroup.add(magRing, magLens, magHandle);
       } else if (propType === 'key') {
         const keyBar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 10), getClayMat(0x22d3ee, 0.3, 0.4, 0x06b6d4, 0.2));
         keyBar.position.set(0.85, 1.5, 0.55);
@@ -1930,18 +1993,23 @@
         charGroup.add(torch);
       }
 
-      // 腳部
-      const legMat = getClayMat(0x334155, 0.6, 0.05);
+      // 腳部（西裝褲 + 紳士黑皮鞋）
+      const legMat = getClayMat(0x1e293b, 0.6, 0.1);
       const leftLeg = new THREE.Mesh(GeoCache.charLimb, legMat);
       leftLeg.position.set(-0.25, 0.35, 0);
       const rightLeg = new THREE.Mesh(GeoCache.charLimb, legMat);
       rightLeg.position.set(0.25, 0.35, 0);
-      charGroup.add(leftLeg, rightLeg);
+      const shoeMat = getClayMat(0x0f172a, 0.3, 0.2);
+      const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.34), shoeMat);
+      leftShoe.position.set(-0.25, 0.07, 0.06);
+      const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.34), shoeMat);
+      rightShoe.position.set(0.25, 0.07, 0.06);
+      charGroup.add(leftLeg, rightLeg, leftShoe, rightShoe);
 
       // 頭頂互動光球
       const marker = new THREE.Mesh(GeoCache.sphereLow, getClayMat(0x38bdf8, 0.2, 0.1, 0x0ea5e9, 0.5));
       marker.scale.setScalar(0.26);
-      marker.position.y = 3.15;
+      marker.position.y = 3.25;
       charGroup.add(marker);
 
       // 綁定互動點擊資料
@@ -2020,38 +2088,134 @@
 
         // 4. 各島專屬微縮模型地標 + 動態人物 + 動態生物
         if (unit.code === '2-1') {
-          // 【2-1 食物中的養分與能量】：花生燃燒卡計塔（科技銀白配色，移除黃色外觀）+ 碘液/本氏液試管架
-          const stand = new THREE.Mesh(new THREE.BoxGeometry(4.5, 4.2, 3.2), getClayMat(0xcbd5e1, 0.45, 0.1));
-          stand.position.set(-2.5, 4.1, -1.5);
-          stand.castShadow = true;
-          stand.userData = {
+          // 【2-1 擬真實驗微縮地標】：花生燃燒熱量測定卡計裝置 (Metallic Calorimeter Setup)
+          const calGroup = new THREE.Group();
+          calGroup.position.set(-2.5, 2.1, -1.5);
+
+          // 1. 隔熱陶瓷底座圓盤
+          const basePlate = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.35, 24), getClayMat(0x334155, 0.6, 0.1));
+          basePlate.position.y = 0.18;
+          basePlate.receiveShadow = true;
+          calGroup.add(basePlate);
+
+          // 2. 金屬三腳架 (3條金屬斜支腳 + 上方金屬圓環)
+          const tripodMat = getClayMat(0x64748b, 0.25, 0.85); // 擬真金屬質感
+          for (let t = 0; t < 3; t++) {
+            const ang = (t / 3) * Math.PI * 2;
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.4, 12), tripodMat);
+            leg.position.set(Math.cos(ang) * 1.35, 1.7, Math.sin(ang) * 1.35);
+            leg.rotation.z = Math.cos(ang) * 0.18;
+            leg.rotation.x = -Math.sin(ang) * 0.18;
+            calGroup.add(leg);
+          }
+          const topRing = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.1, 12, 32), tripodMat);
+          topRing.rotation.x = Math.PI / 2;
+          topRing.position.y = 3.35;
+          calGroup.add(topRing);
+
+          // 3. 陶瓷石綿心網 (Wire Gauze)
+          const gauze = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.08, 24), getClayMat(0x94a3b8, 0.8, 0.1));
+          gauze.position.y = 3.42;
+          calGroup.add(gauze);
+
+          // 4. 透明耐熱玻璃錐形瓶 (Erlenmeyer Flask with Clear Liquid)
+          const flaskBody = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.25, 2.0, 24), getGlassMat(0xe0f2fe, 0.45));
+          flaskBody.position.y = 4.45;
+          flaskBody.castShadow = true;
+          const flaskNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.2, 20), getGlassMat(0xe0f2fe, 0.45));
+          flaskNeck.position.y = 5.75;
+          const flaskLip = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.06, 8, 24), getGlassMat(0xffffff, 0.6));
+          flaskLip.rotation.x = Math.PI / 2;
+          flaskLip.position.y = 6.35;
+          calGroup.add(flaskBody, flaskNeck, flaskLip);
+
+          // 瓶內被加熱的清水 (Water with slight aqua glow)
+          const waterMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 1.15, 1.4, 20), getClayMat(0x38bdf8, 0.15, 0.05, 0x0284c7, 0.2));
+          waterMesh.position.y = 4.2;
+          calGroup.add(waterMesh);
+
+          // 5. 玻璃溫度計 (Glass Thermometer with red alcohol column)
+          const thermStem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 10), getGlassMat(0xffffff, 0.7));
+          thermStem.position.set(0.12, 5.6, 0.1);
+          thermStem.rotation.z = -0.08;
+          const thermRed = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.6, 8), getClayMat(0xef4444, 0.2, 0.1, 0xdc2626, 0.4));
+          thermRed.position.set(0.12, 4.6, 0.1);
+          thermRed.rotation.z = -0.08;
+          calGroup.add(thermStem, thermRed);
+
+          // 6. 燃燒針座與燃燒花生 (Burning Peanut with Flickering Flame)
+          const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.08, 1.1, 8), tripodMat);
+          needle.position.y = 0.8;
+          const peanutF = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 14), getClayMat(0xd97706, 0.65, 0.05));
+          peanutF.scale.set(0.85, 1.25, 0.85);
+          peanutF.position.y = 1.35;
+          peanutF.rotation.z = 0.25;
+          const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), getClayMat(0xfbbf24, 0.2, 0.1, 0xf59e0b, 0.85));
+          flame.position.set(0, 1.75, 0);
+          calGroup.add(needle, peanutF, flame);
+
+          const calMeta = {
             unitCode: '2-1',
             targetTab: 'lab',
-            name: '花生燃燒卡計與營養標示塔',
-            role: '2-1 核心實驗裝置（點擊進入互動實驗與重點）',
-            desc: '點燃花生加熱試管中的水，透過水溫上升度數計算食物釋放的熱量（1卡 = 使 1g 水上升 1℃）！醣類4、蛋白質4、脂質9大卡/克。'
+            name: '🔥 花生燃燒水溫測定卡計裝置',
+            role: '2-1 核心實驗裝置 (點擊進行互動實驗)',
+            desc: '點燃花生加熱錐形瓶中的水，透過水溫上升度數計算食物釋放的熱量（1卡 = 使 1g 水上升 1℃）！醣類4、蛋白質4、脂質9大卡/克。'
           };
-          group.add(stand);
-          islandMeshes.push(stand);
+          calGroup.traverse(c => { if (c.isMesh) { c.userData = calMeta; islandMeshes.push(c); } });
+          group.add(calGroup);
 
-          // 碘液(藍黑)與本氏液(紅、橙、綠)四色試管
-          const tubeColors = [0x312e81, 0xef4444, 0xf97316, 0x10b981];
-          tubeColors.forEach((tc, idx) => {
-            const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 3.6, 16), getClayMat(tc, 0.2, 0.1));
-            tube.position.set(1.5 + idx * 1.45, 3.9, 1.2);
-            tube.castShadow = true;
-            tube.userData = {
+          // 【2-1 擬真雙層木質試管架與透明玻璃試管】(Wooden Test Tube Rack with Clear Glass Tubes)
+          const rackGroup = new THREE.Group();
+          rackGroup.position.set(2.6, 2.1, 1.2);
+
+          const woodMat = getClayMat(0x854d0e, 0.65, 0.05); // 溫潤木紋
+          const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.28, 1.5), woodMat);
+          bottomBar.position.y = 0.14;
+          bottomBar.receiveShadow = true;
+          const topBar = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 1.5), woodMat);
+          topBar.position.y = 2.4;
+          const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 2.4, 1.4), woodMat);
+          leftPillar.position.set(-2.15, 1.2, 0);
+          const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 2.4, 1.4), woodMat);
+          rightPillar.position.set(2.15, 1.2, 0);
+          rackGroup.add(bottomBar, topBar, leftPillar, rightPillar);
+
+          // 4 支真實玻璃試管，內注化學檢測呈色液
+          const tubeConfigs = [
+            { name: '澱粉+碘液試管 (藍黑色反應)', color: 0x1e1b4b, emit: 0x172554, label: '澱粉藍黑', note: '常溫滴加碘液，遇澱粉立刻呈深邃藍黑色！' },
+            { name: '葡萄糖+本氏液隔水加熱 (紅橙色沉澱)', color: 0xdc2626, emit: 0xb91c1c, label: '本氏紅橙', note: '高糖分與本氏液隔水加熱後產生紅橙色沉澱！' },
+            { name: '中糖+本氏液隔水加熱 (黃橙色反應)', color: 0xf59e0b, emit: 0xd97706, label: '本氏黃橙', note: '中等糖分呈現黃橙色反應！' },
+            { name: '微糖+本氏液隔水加熱 (黃綠色反應)', color: 0x10b981, emit: 0x059669, label: '本氏微綠', note: '微量糖分呈現黃綠色反應！' }
+          ];
+
+          tubeConfigs.forEach((cfg, idx) => {
+            const posX = -1.4 + idx * 0.95;
+            // 透明外層玻璃試管
+            const tubeGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3.2, 16), getGlassMat(0xf0f9ff, 0.4));
+            tubeGlass.position.set(posX, 2.0, 0);
+            tubeGlass.castShadow = true;
+            // 試管口玻璃圓唇
+            const tubeLip = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.04, 8, 20), getGlassMat(0xffffff, 0.6));
+            tubeLip.rotation.x = Math.PI / 2;
+            tubeLip.position.set(posX, 3.6, 0);
+            // 內部呈色液體柱
+            const liquid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 2.1, 14), getClayMat(cfg.color, 0.2, 0.1, cfg.emit, 0.35));
+            liquid.position.set(posX, 1.45, 0);
+
+            const tubeData = {
               unitCode: '2-1',
               targetTab: 'video',
-              name: idx === 0 ? '碘液檢測澱粉試管（藍黑色）' : '本氏液隔水加熱試管（綠→黃→橙→紅）',
-              role: '2-1 醣類測定關鍵呈色（點擊看實驗影音）',
-              desc: idx === 0
-                ? '碘液遇到米飯、馬鈴薯或摻麵粉的奶粉中的「澱粉」，常溫下立刻變成藍黑色！'
-                : '本氏液原為淡藍色，加入含葡萄糖液體並「隔水加熱」後，依糖分由少到多呈現綠、黃、橙、紅變化！'
+              name: `🧪 ${cfg.name}`,
+              role: '2-1 醣類測定關鍵呈色 (點擊看實驗影音)',
+              desc: cfg.note
             };
-            group.add(tube);
-            islandMeshes.push(tube);
+            tubeGlass.userData = tubeData;
+            liquid.userData = tubeData;
+            islandMeshes.push(tubeGlass, liquid);
+
+            rackGroup.add(tubeGlass, tubeLip, liquid);
           });
+          group.add(rackGroup);
 
           // 【2-1 動態人物】：營養師小玟（繞島巡邏，點擊開啟 2-1 重點與題庫）
           const charMeta = {
@@ -2066,22 +2230,50 @@
           animatedChars.push({ ...charObj, radius: 6.8, speed: 0.75, angle: 0.2, baseY: 2.1 });
           registerPin(charObj.charGroup, 3.8, '👩‍🔬 營養師小玟', '點我看重點&影音', 'border-blue-400', '2-1', charMeta, 'notes');
 
-          // 【2-1 動態生物】：抱花生小松鼠「波克」（跳躍吃堅果，點擊開啟 2-1 會考評量）
+          // 【2-1 擬真精緻動態生物】：抱花生小松鼠「波克」（立體耳朵、肚皮、毛絨彎尾、捧花生）
           const squirrelGroup = new THREE.Group();
+          // 身體與米白肚皮
           const sqBody = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x9a3412, 0.55, 0.05));
-          sqBody.scale.set(0.9, 1.1, 0.9);
+          sqBody.scale.set(0.9, 1.15, 0.9);
           sqBody.position.y = 1.0;
+          const sqBelly = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0xffedd5, 0.5, 0.05));
+          sqBelly.scale.set(0.68, 0.85, 0.45);
+          sqBelly.position.set(0, 0.95, 0.48);
+          // 頭部、耳朵、黑鼻子
           const sqHead = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0xc2410c, 0.5, 0.05));
-          sqHead.scale.setScalar(0.68);
-          sqHead.position.set(0, 1.9, 0.35);
-          const sqTail = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x7c2d12, 0.6, 0.05));
-          sqTail.scale.set(0.65, 1.35, 0.85);
-          sqTail.position.set(0, 1.35, -0.85);
-          sqTail.rotation.x = -0.45;
-          const peanut = new THREE.Mesh(GeoCache.sphereLow, getClayMat(0xfdba74, 0.5, 0.05));
-          peanut.scale.set(0.45, 0.68, 0.45);
-          peanut.position.set(0, 1.35, 0.85);
-          squirrelGroup.add(sqBody, sqHead, sqTail, peanut);
+          sqHead.scale.setScalar(0.72);
+          sqHead.position.set(0, 1.95, 0.35);
+          const earMat = getClayMat(0x7c2d12, 0.55, 0.05);
+          const earL = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), earMat);
+          earL.position.set(-0.35, 2.5, 0.35);
+          earL.rotation.z = 0.25;
+          const earR = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), earMat);
+          earR.position.set(0.35, 2.5, 0.35);
+          earR.rotation.z = -0.25;
+          const sqNose = new THREE.Mesh(GeoCache.charEye, getClayMat(0x0f172a, 0.2, 0.1));
+          sqNose.position.set(0, 1.95, 0.92);
+          // 蓬鬆 S 曲線立體大尾巴
+          const sqTail = new THREE.Group();
+          const t1 = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x7c2d12, 0.6, 0.05));
+          t1.scale.set(0.65, 1.1, 0.75);
+          t1.position.set(0, 0.8, -0.6);
+          t1.rotation.x = -0.55;
+          const t2 = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x9a3412, 0.55, 0.05));
+          t2.scale.set(0.75, 1.35, 0.85);
+          t2.position.set(0, 1.8, -0.95);
+          t2.rotation.x = 0.25;
+          sqTail.add(t1, t2);
+          // 前爪緊捧著立體網格花生 (Textured Peanut)
+          const peanut = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 14), getClayMat(0xfbbf24, 0.6, 0.1));
+          peanut.scale.set(0.68, 1.05, 0.68);
+          peanut.position.set(0, 1.35, 0.82);
+          peanut.rotation.x = 0.3;
+          const pawL = new THREE.Mesh(GeoCache.charEye, getClayMat(0xc2410c, 0.5, 0.05));
+          pawL.position.set(-0.32, 1.35, 0.75);
+          const pawR = new THREE.Mesh(GeoCache.charEye, getClayMat(0xc2410c, 0.5, 0.05));
+          pawR.position.set(0.32, 1.35, 0.75);
+
+          squirrelGroup.add(sqBody, sqBelly, sqHead, earL, earR, sqNose, sqTail, peanut, pawL, pawR);
           squirrelGroup.position.set(-4.5, 2.1, 4.2);
 
           const sqMeta = {
