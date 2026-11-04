@@ -306,16 +306,51 @@
     </div>
   </aside>
 
-  <!-- 高畫質資訊圖表全螢幕放大燈箱 (Lightbox Modal) -->
-  <div id="lightbox-modal" class="fixed inset-0 z-50 bg-slate-950/90 flex flex-col items-center justify-center p-4 hidden" onclick="closeLightbox()">
-    <div class="relative max-w-5xl w-full flex flex-col items-center" onclick="event.stopPropagation()">
-      <div class="w-full flex items-center justify-between mb-3 px-2">
-        <span id="lightbox-caption" class="text-base font-bold text-cyan-300">高解析度重點資訊圖表</span>
-        <button onclick="closeLightbox()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1.5 border border-slate-600">
-          <i class="fa-solid fa-xmark"></i> 關閉預覽
+  <!-- 專業級可縮放、可拖曳、可左右翻頁之高畫質圖解檢視燈箱 (Pan & Zoom Lightbox Modal) -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 bg-slate-950/95 flex flex-col justify-between p-3 sm:p-5 hidden" onclick="closeLightbox()">
+    <!-- 頂部工具列 -->
+    <div class="w-full max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2 bg-slate-900/95 px-4 py-2.5 rounded-2xl border border-slate-700 z-10" onclick="event.stopPropagation()">
+      <div class="flex items-center gap-2.5">
+        <span id="lightbox-counter" class="px-2.5 py-0.5 rounded-full bg-blue-600/30 text-cyan-300 border border-blue-400/40 text-xs font-extrabold font-mono">1 / 6</span>
+        <span id="lightbox-caption" class="text-sm sm:text-base font-black text-white">高解析度重點資訊圖表</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="zoomLightbox(-0.25)" title="縮小 (滾輪向下)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-600 flex items-center gap-1">
+          <i class="fa-solid fa-magnifying-glass-minus"></i>
+        </button>
+        <span id="lightbox-zoom-label" class="px-2 py-1 text-xs font-mono font-bold text-cyan-300 min-w-[52px] text-center">100%</span>
+        <button onclick="zoomLightbox(0.25)" title="放大 (滾輪向上)" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-600 flex items-center gap-1">
+          <i class="fa-solid fa-magnifying-glass-plus"></i>
+        </button>
+        <button onclick="resetLightboxZoom()" title="重設比例" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-600">
+          1:1
+        </button>
+        <a id="lightbox-download" href="" target="_blank" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1">
+          <i class="fa-solid fa-up-right-from-square"></i> 原圖開啟
+        </a>
+        <button onclick="closeLightbox()" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1">
+          <i class="fa-solid fa-xmark"></i> 關閉
         </button>
       </div>
-      <img id="lightbox-img" src="" alt="高解析度圖解" class="max-h-[82vh] w-auto rounded-2xl border border-slate-600 shadow-2xl object-contain bg-slate-900">
+    </div>
+
+    <!-- 中央可縮放與拖曳平移畫布區 -->
+    <div id="lightbox-stage" class="relative flex-1 w-full max-w-6xl mx-auto my-2 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 flex items-center justify-center cursor-grab active:cursor-grabbing" onclick="event.stopPropagation()">
+      <!-- 左側上一張按鈕 -->
+      <button onclick="stepLightbox(-1)" class="absolute left-3 z-20 w-11 h-11 rounded-full bg-slate-950/90 hover:bg-blue-600 text-white border border-slate-600 flex items-center justify-center shadow-2xl transition">
+        <i class="fa-solid fa-chevron-left text-base"></i>
+      </button>
+
+      <img id="lightbox-img" src="" alt="高解析度圖解" draggable="false" class="max-h-[74vh] max-w-[92%] w-auto h-auto object-contain transition-transform duration-75 select-none" style="transform: translate(0px, 0px) scale(1);">
+
+      <!-- 右側下一張按鈕 -->
+      <button onclick="stepLightbox(1)" class="absolute right-3 z-20 w-11 h-11 rounded-full bg-slate-950/90 hover:bg-blue-600 text-white border border-slate-600 flex items-center justify-center shadow-2xl transition">
+        <i class="fa-solid fa-chevron-right text-base"></i>
+      </button>
+    </div>
+
+    <!-- 底部縮圖快速切換列 -->
+    <div id="lightbox-thumbs" class="w-full max-w-6xl mx-auto flex items-center justify-center gap-2 overflow-x-auto py-1.5 px-3 bg-slate-900/95 rounded-2xl border border-slate-700" onclick="event.stopPropagation()">
     </div>
   </div>
 
@@ -487,16 +522,157 @@
       if (modal) modal.classList.toggle('hidden');
     }
 
-    function openLightbox(src, caption) {
+    // 專業級 Pan & Zoom 圖解檢視器狀態
+    const GALLERY_MAP = {
+      '2-1': [
+        { src: 'images/2-1_nutrients_guide.png', title: '2-1 食物六大養分與能量指南（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-1_sugar_test_guide.png', title: '2-1 食物中醣類檢測指南：碘液 vs 本氏液（AI 視覺資訊圖表）', tag: '實驗圖表' },
+        { src: 'images/2-1_all_summary.jpg', title: '2-1 全節重點與必考觀念總整理（精華講義）', tag: '考前精華' },
+        { src: 'images/2-1_exp1.jpg', title: '2-1 實驗一：花生燃燒測定食物熱量與水溫變化', tag: '實驗圖解' },
+        { src: 'images/2-1_exp2.jpg', title: '2-1 實驗二：澱粉（碘液）與葡萄糖（本氏液隔水加熱）雙重測定', tag: '實驗圖解' },
+        { src: 'images/2-1_quiz1.jpg', title: '2-1 隨堂實力評量原卷與詳解', tag: '原卷評量' }
+      ],
+      '2-2': [
+        { src: 'images/2-2_enzyme_features.png', title: '2-2 酵素特性與活性因素全圖解（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-2_temp_saliva.png', title: '2-2 溫度對唾液酵素活性的影響實驗（AI 視覺資訊圖表）', tag: '實驗圖表' },
+        { src: 'images/2-2_all_summary.jpg', title: '2-2 全節重點與必考觀念總整理（精華講義）', tag: '考前精華' },
+        { src: 'images/2-2_exp1.jpg', title: '2-2 實驗圖解（一）：唾液澱粉酶溫度水浴對照設計', tag: '實驗圖解' },
+        { src: 'images/2-2_exp2.jpg', title: '2-2 實驗圖解（二）：本氏液隔水加熱結果與高溫變性解析', tag: '實驗圖解' },
+        { src: 'images/2-2_quiz1.jpg', title: '2-2 隨堂實力評量原卷與詳解', tag: '原卷評量' }
+      ],
+      '2-3': [
+        { src: 'images/2-3_leaf_structure.png', title: '2-3 葉片解剖構造與保衛細胞氣孔圖解（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-3_photosynthesis_guide.png', title: '2-3 光反應與碳反應雙階段全圖解（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-3_all_summary.jpg', title: '2-3 全節重點與必考觀念總整理（精華講義）', tag: '考前精華' },
+        { src: 'images/2-3_exp1.jpg', title: '2-3 實驗圖解（一）：鋁箔遮光與隔水加熱酒精溶出葉綠素', tag: '實驗圖解' },
+        { src: 'images/2-3_exp2.jpg', title: '2-3 實驗圖解（二）：碘液滴加澱粉藍黑色呈色比較', tag: '實驗圖解' },
+        { src: 'images/2-3_quiz1.jpg', title: '2-3 隨堂實力評量原卷與詳解', tag: '原卷評量' }
+      ],
+      '2-4': [
+        { src: 'images/2-4_digestion_all.png', title: '2-4 動物消化與吸收全解析（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-4_human_digestion.png', title: '2-4 人體消化道與五大消化腺機制圖解（AI 視覺資訊圖表）', tag: '核心圖表' },
+        { src: 'images/2-4_all_summary.jpg', title: '2-4 全節重點與必考觀念總整理（精華講義）', tag: '考前精華' },
+        { src: 'images/2-4_text1.jpg', title: '2-4 課本精析（一）：消化管順序與五大消化液作用表', tag: '課本精析' },
+        { src: 'images/2-4_text2.jpg', title: '2-4 課本精析（二）：小腸指狀絨毛吸收與排遺定義', tag: '課本精析' },
+        { src: 'images/2-4_quiz1.jpg', title: '2-4 隨堂實力評量原卷與詳解', tag: '原卷評量' }
+      ]
+    };
+
+    let _lbList = [];
+    let _lbIdx = 0;
+    let _lbZoom = 1;
+    let _lbPanX = 0;
+    let _lbPanY = 0;
+    let _lbDragging = false;
+    let _lbStartX = 0;
+    let _lbStartY = 0;
+
+    function applyLightboxTransform() {
+      const img = document.getElementById('lightbox-img');
+      const label = document.getElementById('lightbox-zoom-label');
+      if (img) {
+        img.style.transform = `translate(${_lbPanX}px, ${_lbPanY}px) scale(${_lbZoom})`;
+      }
+      if (label) {
+        label.textContent = `${Math.round(_lbZoom * 100)}%`;
+      }
+    }
+
+    function resetLightboxZoom() {
+      _lbZoom = 1;
+      _lbPanX = 0;
+      _lbPanY = 0;
+      applyLightboxTransform();
+    }
+
+    function zoomLightbox(delta) {
+      _lbZoom = Math.min(3.5, Math.max(0.75, _lbZoom + delta));
+      if (_lbZoom === 1) {
+        _lbPanX = 0;
+        _lbPanY = 0;
+      }
+      applyLightboxTransform();
+    }
+
+    function renderLightboxSlide() {
+      if (!_lbList.length) return;
+      const item = _lbList[_lbIdx];
+      document.getElementById('lightbox-img').src = item.src;
+      document.getElementById('lightbox-caption').innerText = item.title;
+      document.getElementById('lightbox-counter').innerText = `${_lbIdx + 1} / ${_lbList.length}`;
+      document.getElementById('lightbox-download').href = item.src;
+      resetLightboxZoom();
+
+      const thumbs = document.getElementById('lightbox-thumbs');
+      if (thumbs) {
+        thumbs.innerHTML = _lbList.map((g, i) => `
+          <button onclick="selectLightboxIdx(${i})" class="px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 border ${i === _lbIdx ? 'bg-blue-600 text-white border-cyan-300 shadow-lg' : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'}">
+            <span class="px-1.5 py-0.2 rounded bg-slate-950/60 text-[10px] text-cyan-300">${g.tag}</span>
+            <span>${i + 1}. ${g.title.split('（')[0]}</span>
+          </button>
+        `).join('');
+      }
+    }
+
+    function selectLightboxIdx(idx) {
       SoundFX.playClick();
-      document.getElementById('lightbox-img').src = src;
-      document.getElementById('lightbox-caption').innerText = caption || '高畫質圖解預覽';
+      _lbIdx = idx;
+      renderLightboxSlide();
+    }
+
+    function stepLightbox(dir) {
+      SoundFX.playClick();
+      if (!_lbList.length) return;
+      _lbIdx = (_lbIdx + dir + _lbList.length) % _lbList.length;
+      renderLightboxSlide();
+    }
+
+    function openLightbox(src, caption, unitCode) {
+      SoundFX.playClick();
+      const key = unitCode || (typeof currentUnitKey !== 'undefined' ? currentUnitKey : '2-1');
+      _lbList = GALLERY_MAP[key] || [{ src, title: caption || '高畫質圖解預覽', tag: '圖解' }];
+      const found = _lbList.findIndex(item => item.src === src);
+      _lbIdx = found >= 0 ? found : 0;
+      renderLightboxSlide();
       document.getElementById('lightbox-modal').classList.remove('hidden');
     }
 
     function closeLightbox() {
       document.getElementById('lightbox-modal').classList.add('hidden');
     }
+
+    // 綁定燈箱滾輪縮放、滑鼠拖曳平移與鍵盤左右方向鍵
+    window.addEventListener('DOMContentLoaded', () => {
+      const stage = document.getElementById('lightbox-stage');
+      if (!stage) return;
+      stage.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        zoomLightbox(e.deltaY < 0 ? 0.25 : -0.25);
+      }, { passive: false });
+
+      stage.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button')) return;
+        _lbDragging = true;
+        _lbStartX = e.clientX - _lbPanX;
+        _lbStartY = e.clientY - _lbPanY;
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!_lbDragging) return;
+        _lbPanX = e.clientX - _lbStartX;
+        _lbPanY = e.clientY - _lbStartY;
+        applyLightboxTransform();
+      });
+      window.addEventListener('pointerup', () => {
+        _lbDragging = false;
+      });
+      window.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('lightbox-modal');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (e.key === 'ArrowRight') stepLightbox(1);
+        else if (e.key === 'ArrowLeft') stepLightbox(-1);
+        else if (e.key === 'Escape') closeLightbox();
+      });
+    });
 
     /* ==========================================================================
        1. 國中自然 7 上 第 2 章 完整課程數據庫 (含高畫質圖解、歷屆會考題庫、影音)
@@ -514,21 +690,37 @@
         voiceSummary: '歡迎來到二之一養分與能量島！請記住秒殺口訣：脂九、醣四、蛋白四！每公克脂質產生九大卡，醣類與蛋白質各產生四大卡，而水、礦物質、維生素是零大卡不產能，但對維持生理機能絕對不可或缺！測定澱粉用碘液，遇澱粉變藍黑色；測定葡萄糖用淡藍色本氏液，一定要隔水加熱防突沸，顏色由藍變綠、黃、橙、紅！',
         notes: `
           <div class="space-y-4 text-xs sm:text-sm">
-            <!-- 高畫質視覺圖解雙卡 (點擊放大) -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="group relative rounded-2xl overflow-hidden border border-blue-400/40 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-1_nutrients_guide.png', '2-1 食物六大養分與能量指南')">
-                <img src="images/2-1_nutrients_guide.png" alt="2-1 食物六大養分與能量指南" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/90 flex items-center justify-between text-xs">
-                  <span class="font-bold text-sky-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>六大養分與能量指南</span>
-                  <span class="text-[11px] text-slate-300">點擊放大</span>
+            <!-- 完整比例零裁切高畫質圖解專區 (點擊開啟無段縮放與 6 圖連播畫廊) -->
+            <div class="p-3 rounded-2xl bg-slate-900 border border-blue-400/40 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-black text-sky-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-images"></i> 2-1 完整高畫質圖解與實驗講義畫廊（共 6 張，點擊可滾輪無段放大）
+                </span>
+                <button onclick="openLightbox('images/2-1_nutrients_guide.png', '2-1 食物六大養分與能量指南', '2-1')" class="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-expand"></i> 全螢幕放大檢視 (6張)
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-1_nutrients_guide.png', '2-1 食物六大養分與能量指南', '2-1')">
+                  <img src="images/2-1_nutrients_guide.png" alt="2-1 食物六大養分與能量指南" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-sky-300">📊 六大養分與能量指南（完整全圖）</span>
+                    <span class="text-cyan-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
+                </div>
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-1_sugar_test_guide.png', '2-1 食物中醣類檢測指南（碘液 vs 本氏液）', '2-1')">
+                  <img src="images/2-1_sugar_test_guide.png" alt="2-1 食物中醣類檢測指南" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-cyan-300">🧪 食物中醣類檢測指南（完整全圖）</span>
+                    <span class="text-cyan-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
                 </div>
               </div>
-              <div class="group relative rounded-2xl overflow-hidden border border-blue-400/40 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-1_sugar_test_guide.png', '2-1 食物中醣類檢測指南（碘液 vs 本氏液）')">
-                <img src="images/2-1_sugar_test_guide.png" alt="2-1 食物中醣類檢測指南" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/90 flex items-center justify-between text-xs">
-                  <span class="font-bold text-cyan-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>食物中醣類檢測指南</span>
-                  <span class="text-[11px] text-slate-300">點擊放大</span>
-                </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button onclick="openLightbox('images/2-1_all_summary.jpg', '2-1 全節重點總整理', '2-1')" class="p-2 rounded-xl bg-slate-800 hover:bg-blue-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-file-lines text-sky-300"></i>重點講義圖</button>
+                <button onclick="openLightbox('images/2-1_exp1.jpg', '2-1 花生燃燒卡計實驗', '2-1')" class="p-2 rounded-xl bg-slate-800 hover:bg-blue-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-fire text-rose-300"></i>熱量實驗圖</button>
+                <button onclick="openLightbox('images/2-1_exp2.jpg', '2-1 碘液與本氏液雙重測定', '2-1')" class="p-2 rounded-xl bg-slate-800 hover:bg-blue-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-vials text-cyan-300"></i>醣類實驗圖</button>
+                <button onclick="openLightbox('images/2-1_quiz1.jpg', '2-1 隨堂實力評量原卷', '2-1')" class="p-2 rounded-xl bg-slate-800 hover:bg-blue-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-pen-clip text-emerald-300"></i>原卷評量圖</button>
               </div>
             </div>
 
@@ -712,21 +904,37 @@
         voiceSummary: '歡迎來到二之二酵素催化島！酵素又稱生物催化劑，主要成分是蛋白質！它有專一性，像鑰匙配鎖孔一樣，而且反應前後質量與結構都不變，可以重複使用。請特別注意：低溫只會讓酵素暫時失去活性，回溫就能恢復；但高溫煮沸會讓蛋白質永久變性失活，就算降溫也救不回來囉！至於酸鹼度，胃蛋白酶喜歡強酸 pH 2、唾液澱粉酶喜歡中性 pH 7、小腸胰液喜歡弱鹼性 pH 8！',
         notes: `
           <div class="space-y-4 text-xs sm:text-sm">
-            <!-- 高畫質視覺圖解雙卡 -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="group relative rounded-2xl overflow-hidden border border-cyan-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-2_enzyme_features.png', '2-2 酵素特性與活性因素全圖解')">
-                <img src="images/2-2_enzyme_features.png" alt="2-2 酵素特性與活性因素" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-cyan-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>酵素特性與活性因素圖解</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
+            <!-- 完整比例零裁切高畫質圖解專區 -->
+            <div class="p-3 rounded-2xl bg-slate-900 border border-cyan-400/40 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-black text-cyan-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-images"></i> 2-2 完整高畫質圖解與實驗講義畫廊（共 6 張，點擊可滾輪無段放大）
+                </span>
+                <button onclick="openLightbox('images/2-2_enzyme_features.png', '2-2 酵素特性與活性因素全圖解', '2-2')" class="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-expand"></i> 全螢幕放大檢視 (6張)
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-2_enzyme_features.png', '2-2 酵素特性與活性因素全圖解', '2-2')">
+                  <img src="images/2-2_enzyme_features.png" alt="2-2 酵素特性與活性因素" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-cyan-300">🧬 酵素特性與活性因素（完整全圖）</span>
+                    <span class="text-cyan-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
+                </div>
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-2_temp_saliva.png', '2-2 溫度對唾液酵素活性的影響實驗', '2-2')">
+                  <img src="images/2-2_temp_saliva.png" alt="2-2 溫度對唾液酵素活性的影響" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-sky-300">🌡️ 溫度對唾液酵素活性影響（完整全圖）</span>
+                    <span class="text-cyan-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
                 </div>
               </div>
-              <div class="group relative rounded-2xl overflow-hidden border border-cyan-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-2_temp_saliva.png', '2-2 溫度對唾液酵素活性的影響實驗')">
-                <img src="images/2-2_temp_saliva.png" alt="2-2 溫度對唾液酵素活性的影響" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-amber-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>溫度對唾液酵素活性影響</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
-                </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button onclick="openLightbox('images/2-2_all_summary.jpg', '2-2 全節重點總整理', '2-2')" class="p-2 rounded-xl bg-slate-800 hover:bg-cyan-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-file-lines text-cyan-300"></i>重點講義圖</button>
+                <button onclick="openLightbox('images/2-2_exp1.jpg', '2-2 唾液澱粉酶實驗步驟(一)', '2-2')" class="p-2 rounded-xl bg-slate-800 hover:bg-cyan-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-flask text-sky-300"></i>實驗步驟(一)</button>
+                <button onclick="openLightbox('images/2-2_exp2.jpg', '2-2 唾液澱粉酶實驗結果(二)', '2-2')" class="p-2 rounded-xl bg-slate-800 hover:bg-cyan-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-vial-circle-check text-rose-300"></i>實驗結果(二)</button>
+                <button onclick="openLightbox('images/2-2_quiz1.jpg', '2-2 隨堂實力評量原卷', '2-2')" class="p-2 rounded-xl bg-slate-800 hover:bg-cyan-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-pen-clip text-emerald-300"></i>原卷評量圖</button>
               </div>
             </div>
 
@@ -870,21 +1078,37 @@
         voiceSummary: '歡迎來到二之三植物光合作用島！先記住葉片構造口訣：表皮透光無葉綠，保衛半月成雙對，葉肉飽滿行光合，角質防水脈通送！整片葉子只有保衛細胞和葉肉細胞有葉綠體喔！光合作用分為光反應與碳反應：光反應分解水釋放氧氣；碳反應利用能量把二氧化碳合成葡萄糖與水。實驗脫色四部曲：沸水煮沸破膜、隔水加熱酒精溶出葉綠素、溫水漂洗軟化、最後滴加碘液驗澱粉！',
         notes: `
           <div class="space-y-4 text-xs sm:text-sm">
-            <!-- 高畫質視覺圖解雙卡 -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="group relative rounded-2xl overflow-hidden border border-emerald-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-3_leaf_structure.png', '2-3 葉片構造與光合作用圖解')">
-                <img src="images/2-3_leaf_structure.png" alt="2-3 葉片構造與光合作用圖解" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-emerald-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>葉片解剖構造與氣孔圖解</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
+            <!-- 完整比例零裁切高畫質圖解專區 -->
+            <div class="p-3 rounded-2xl bg-slate-900 border border-emerald-400/40 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-black text-emerald-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-images"></i> 2-3 完整高畫質圖解與實驗講義畫廊（共 6 張，點擊可滾輪無段放大）
+                </span>
+                <button onclick="openLightbox('images/2-3_leaf_structure.png', '2-3 葉片構造與光合作用圖解', '2-3')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-expand"></i> 全螢幕放大檢視 (6張)
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-3_leaf_structure.png', '2-3 葉片構造與光合作用圖解', '2-3')">
+                  <img src="images/2-3_leaf_structure.png" alt="2-3 葉片構造與光合作用圖解" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-emerald-300">🌿 葉片解剖構造與氣孔（完整全圖）</span>
+                    <span class="text-emerald-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
+                </div>
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-3_photosynthesis_guide.png', '2-3 植物養分與光合作用雙階段圖解', '2-3')">
+                  <img src="images/2-3_photosynthesis_guide.png" alt="2-3 植物養分與光合作用圖解" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-cyan-300">☀️ 光反應與碳反應雙階段（完整全圖）</span>
+                    <span class="text-emerald-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
                 </div>
               </div>
-              <div class="group relative rounded-2xl overflow-hidden border border-emerald-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-3_photosynthesis_guide.png', '2-3 植物養分與光合作用雙階段圖解')">
-                <img src="images/2-3_photosynthesis_guide.png" alt="2-3 植物養分與光合作用圖解" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-amber-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>光反應与碳反應全圖解</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
-                </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button onclick="openLightbox('images/2-3_all_summary.jpg', '2-3 全節重點總整理', '2-3')" class="p-2 rounded-xl bg-slate-800 hover:bg-emerald-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-file-lines text-emerald-300"></i>重點講義圖</button>
+                <button onclick="openLightbox('images/2-3_exp1.jpg', '2-3 光合作用脫色實驗(一)', '2-3')" class="p-2 rounded-xl bg-slate-800 hover:bg-emerald-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-flask text-sky-300"></i>脫色實驗(一)</button>
+                <button onclick="openLightbox('images/2-3_exp2.jpg', '2-3 光合作用碘液檢驗(二)', '2-3')" class="p-2 rounded-xl bg-slate-800 hover:bg-emerald-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-vial-circle-check text-rose-300"></i>碘液檢驗(二)</button>
+                <button onclick="openLightbox('images/2-3_quiz1.jpg', '2-3 隨堂實力評量原卷', '2-3')" class="p-2 rounded-xl bg-slate-800 hover:bg-emerald-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-pen-clip text-cyan-300"></i>原卷評量圖</button>
               </div>
             </div>
 
@@ -1042,21 +1266,37 @@
         voiceSummary: '歡迎來到二之四動物消化與吸收島！水螅、海葵是單一開口的囊狀消化腔；人類則是口進肛門出的單向管狀消化道。五大消化腺中，最愛考的兩大魔王：第一，肝臟製造的膽汁儲存在膽囊，注入小腸，完全不含任何消化酵素！只負責把大油滴物理乳化成小油滴。第二，胰臟分泌的胰液注入小腸，是唯一能同時分解醣類、蛋白質、脂質的全能消化液！最後在小腸靠指狀絨毛大幅增加表面積，完成養分吸收！',
         notes: `
           <div class="space-y-4 text-xs sm:text-sm">
-            <!-- 高畫質視覺圖解雙卡 -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="group relative rounded-2xl overflow-hidden border border-rose-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-4_digestion_all.png', '2-4 動物消化與吸收全解析')">
-                <img src="images/2-4_digestion_all.png" alt="2-4 動物消化與吸收全解析" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-rose-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>動物消化與吸收全解析</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
+            <!-- 完整比例零裁切高畫質圖解專區 -->
+            <div class="p-3 rounded-2xl bg-slate-900 border border-rose-400/40 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-black text-rose-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-images"></i> 2-4 完整高畫質圖解與實驗講義畫廊（共 6 張，點擊可滾輪無段放大）
+                </span>
+                <button onclick="openLightbox('images/2-4_digestion_all.png', '2-4 動物消化與吸收全解析', '2-4')" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-expand"></i> 全螢幕放大檢視 (6張)
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-4_digestion_all.png', '2-4 動物消化與吸收全解析', '2-4')">
+                  <img src="images/2-4_digestion_all.png" alt="2-4 動物消化與吸收全解析" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-rose-300">🩺 動物消化與吸收全解析（完整全圖）</span>
+                    <span class="text-rose-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
+                </div>
+                <div class="group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 cursor-pointer shadow-lg flex flex-col" onclick="openLightbox('images/2-4_human_digestion.png', '2-4 人體消化與吸收機制圖解', '2-4')">
+                  <img src="images/2-4_human_digestion.png" alt="2-4 人體消化與吸收機制" class="w-full h-auto max-h-56 object-contain bg-slate-950 p-1 group-hover:brightness-110 transition">
+                  <div class="p-2 bg-slate-900 flex items-center justify-between text-xs border-t border-slate-800">
+                    <span class="font-bold text-cyan-300">🫀 人體消化道與消化腺機制（完整全圖）</span>
+                    <span class="text-rose-300 font-bold"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>放大</span>
+                  </div>
                 </div>
               </div>
-              <div class="group relative rounded-2xl overflow-hidden border border-rose-400/30 bg-slate-900 cursor-pointer shadow-lg" onclick="openLightbox('images/2-4_human_digestion.png', '2-4 人體消化與吸收機制圖解')">
-                <img src="images/2-4_human_digestion.png" alt="2-4 人體消化與吸收機制" class="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.parentElement.style.display='none'">
-                <div class="p-2 bg-slate-950/85 flex items-center justify-between text-xs">
-                  <span class="font-bold text-amber-300"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>人體消化道與消化腺機制</span>
-                  <span class="text-[10px] text-slate-400">點擊放大</span>
-                </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button onclick="openLightbox('images/2-4_all_summary.jpg', '2-4 全節重點總整理', '2-4')" class="p-2 rounded-xl bg-slate-800 hover:bg-rose-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-file-lines text-rose-300"></i>重點講義圖</button>
+                <button onclick="openLightbox('images/2-4_text1.jpg', '2-4 消化管與五大消化腺講義(一)', '2-4')" class="p-2 rounded-xl bg-slate-800 hover:bg-rose-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-book-medical text-sky-300"></i>課本圖解(一)</button>
+                <button onclick="openLightbox('images/2-4_text2.jpg', '2-4 小腸絨毛吸收與排遺講義(二)', '2-4')" class="p-2 rounded-xl bg-slate-800 hover:bg-rose-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-microscope text-cyan-300"></i>絨毛圖解(二)</button>
+                <button onclick="openLightbox('images/2-4_quiz1.jpg', '2-4 隨堂實力評量原卷', '2-4')" class="p-2 rounded-xl bg-slate-800 hover:bg-rose-600/40 border border-slate-600 text-xs font-bold text-white flex items-center justify-center gap-1"><i class="fa-solid fa-pen-clip text-emerald-300"></i>原卷評量圖</button>
               </div>
             </div>
 
@@ -1269,58 +1509,42 @@
       return MatCache[key];
     }
 
-    // 註冊各島主圖塊（含直達：課程重點 / 會考評量 / 教學影音 三大快捷鈕）
+    // 註冊各島主圖塊（極簡高對比單行標題膠囊，移除重點/評量/影音小按鈕，點擊直接飛島並展開課程）
     function registerIslandHubPin(targetObj, offsetY, unitCode, titleText, borderClass) {
       const layer = document.getElementById('pins-layer');
       if (!layer) return;
       const el = document.createElement('div');
       el.className = 'pin-marker';
+      el.style.zIndex = '18';
       el.innerHTML = `
-        <div class="pin-card ${borderClass} flex flex-col items-center gap-1.5">
-          <div class="pin-header flex items-center gap-1.5 whitespace-nowrap px-1">
-            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-            <span class="text-xs sm:text-sm font-black text-white tracking-wide">${unitCode} ${titleText}</span>
-          </div>
-          <div class="flex items-center gap-1 pt-0.5 border-t border-slate-700/90 w-full justify-center">
-            <button data-tab="notes" class="pin-tab-btn px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-[11px] font-bold text-white transition">📖重點</button>
-            <button data-tab="quiz" class="pin-tab-btn px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] font-bold text-white transition">🎓評量</button>
-            <button data-tab="video" class="pin-tab-btn px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-[11px] font-bold text-white transition">🎬影音</button>
-          </div>
+        <div class="pin-card ${borderClass} flex items-center gap-2 whitespace-nowrap px-3.5 py-1.5 shadow-2xl">
+          <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+          <span class="text-xs sm:text-sm font-black text-white tracking-wide">${unitCode} ${titleText}</span>
         </div>
-        <div class="w-0.5 h-3 bg-cyan-400/80"></div>
+        <div class="w-0.5 h-3.5 bg-cyan-400/80"></div>
       `;
 
-      // 點擊標題整個圖塊開啟該島課程重點
       el.querySelector('.pin-card').addEventListener('click', (e) => {
         e.stopPropagation();
         flyToIsland(unitCode, true, 'notes');
       });
 
-      // 點擊圖塊內「重點 / 評量 / 影音」直達對應分頁
-      el.querySelectorAll('.pin-tab-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const tab = btn.getAttribute('data-tab');
-          flyToIsland(unitCode, true, tab);
-        });
-      });
-
       layer.appendChild(el);
-      billboardPins.push({ targetObj, offsetY, el });
+      billboardPins.push({ targetObj, offsetY: 12.6, el, isHub: true, sx: 0, sy: 0, visible: false });
     }
 
-    // 註冊人物與生物 3D 浮空標籤（點擊打開語音對話卡 + 連動右側課程重點/評量/影音）
+    // 註冊人物與生物 3D 浮空標籤（精簡清晰膠囊，點擊打開語音對話卡 + 連動右側課程重點/評量/影音）
     function registerPin(targetObj, offsetY, label, subLabel, colorClass, unitCode, entityData, defaultTab = 'notes') {
       const layer = document.getElementById('pins-layer');
       if (!layer) return;
       const el = document.createElement('div');
       el.className = 'pin-marker';
+      el.style.zIndex = '14';
       el.innerHTML = `
         <div class="pin-card ${colorClass} flex items-center gap-1.5 whitespace-nowrap py-1 px-2.5">
           <span class="text-xs font-extrabold text-white">${label}</span>
-          ${subLabel ? `<span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200 font-bold hidden sm:inline">${subLabel}</span>` : ''}
         </div>
-        <div class="w-0.5 h-2.5 bg-slate-300/70"></div>
+        <div class="w-0.5 h-2 bg-slate-300/70"></div>
       `;
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1332,15 +1556,16 @@
         }
       });
       layer.appendChild(el);
-      billboardPins.push({ targetObj, offsetY, el });
+      billboardPins.push({ targetObj, offsetY, el, isHub: false, sx: 0, sy: 0, visible: false });
     }
 
-    // 整數像素對齊投影（徹底消除 sub-pixel 字體模糊）
+    // 整數像素對齊投影 + 2D 螢幕空間防重疊排斥演算法（確保標籤永遠清晰且絕不互相遮擋）
     function updateBillboardPins() {
       if (!pinsVisible) return;
       const halfW = window.innerWidth * 0.5;
       const halfH = window.innerHeight * 0.5;
 
+      // 第一步：計算所有標籤的原始螢幕投影座標
       for (let i = 0; i < billboardPins.length; i++) {
         const pin = billboardPins[i];
         pin.targetObj.getWorldPosition(_projVec);
@@ -1348,18 +1573,63 @@
         _projVec.project(camera);
 
         if (_projVec.z > 1.0 || _projVec.z < -1.0) {
+          pin.visible = false;
           pin.el.style.display = 'none';
           continue;
         }
-        const x = Math.round((_projVec.x * halfW) + halfW);
-        const y = Math.round(-(_projVec.y * halfH) + halfH);
-        if (x < -120 || x > window.innerWidth + 120 || y < -80 || y > window.innerHeight + 80) {
+        const x = (_projVec.x * halfW) + halfW;
+        const y = -(_projVec.y * halfH) + halfH;
+        if (x < -100 || x > window.innerWidth + 100 || y < -60 || y > window.innerHeight + 60) {
+          pin.visible = false;
           pin.el.style.display = 'none';
           continue;
         }
+        pin.visible = true;
+        pin.sx = x;
+        pin.sy = y;
+      }
+
+      // 第二步：2D 防重疊碰撞排斥（主圖塊 isHub 固定不動，人物與生物標籤自動錯開不重疊）
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 0; i < billboardPins.length; i++) {
+          const a = billboardPins[i];
+          if (!a.visible) continue;
+          for (let j = i + 1; j < billboardPins.length; j++) {
+            const b = billboardPins[j];
+            if (!b.visible) continue;
+            const dx = b.sx - a.sx;
+            const dy = b.sy - a.sy;
+            const minW = (a.isHub || b.isHub) ? 135 : 108;
+            const minH = (a.isHub || b.isHub) ? 38 : 30;
+            if (Math.abs(dx) < minW && Math.abs(dy) < minH) {
+              const pushY = (minH - Math.abs(dy)) * 0.55 + 2;
+              const pushX = (minW - Math.abs(dx)) * 0.25;
+              if (a.isHub && !b.isHub) {
+                b.sy += (dy >= 0 ? pushY * 1.6 : -pushY * 1.6);
+                b.sx += (dx >= 0 ? pushX : -pushX);
+              } else if (!a.isHub && b.isHub) {
+                a.sy += (dy >= 0 ? -pushY * 1.6 : pushY * 1.6);
+                a.sx += (dx >= 0 ? -pushX : pushX);
+              } else {
+                const dirY = dy >= 0 ? 1 : -1;
+                const dirX = dx >= 0 ? 1 : -1;
+                a.sy -= dirY * pushY;
+                b.sy += dirY * pushY;
+                a.sx -= dirX * pushX * 0.5;
+                b.sx += dirX * pushX * 0.5;
+              }
+            }
+          }
+        }
+      }
+
+      // 第三步：整數像素寫入 DOM（杜絕次像素模糊）
+      for (let i = 0; i < billboardPins.length; i++) {
+        const pin = billboardPins[i];
+        if (!pin.visible) continue;
         pin.el.style.display = 'flex';
-        pin.el.style.left = `${x}px`;
-        pin.el.style.top = `${y}px`;
+        pin.el.style.left = `${Math.round(pin.sx)}px`;
+        pin.el.style.top = `${Math.round(pin.sy)}px`;
       }
     }
 
