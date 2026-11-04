@@ -1,0 +1,2250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STELLA 國中7上自然第2章 3D互動教學微縮群島（WebGL 旗艦優化版）</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Three.js r128 & OrbitControls & Canvas Confetti -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- Google Fonts: Fredoka & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --clay-softness: 12px;
+      --font-body: 'Fredoka', 'Noto Sans TC', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font-body);
+      margin: 0;
+      overflow: hidden;
+      user-select: none;
+      background-color: #070a14;
+      color: #f1f5f9;
+    }
+
+    /* 傾斜移軸 (Tilt-Shift) 景深邊緣模糊效果 - 模擬微距模型相機 */
+    .tilt-shift-top {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 95px;
+      pointer-events: none;
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+      z-index: 5;
+    }
+    .tilt-shift-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 95px;
+      pointer-events: none;
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+      -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+      z-index: 5;
+    }
+
+    /* 微縮模型專屬暗角光學光環 */
+    .vignette-clay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 50%, transparent 60%, rgba(5, 8, 18, 0.6) 100%);
+      z-index: 6;
+    }
+
+    /* 高質感毛玻璃擬態面板 */
+    .glassmorphism {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    }
+
+    .glass-tab-active {
+      background: linear-gradient(135deg, #f59e0b 0%, #ec4899 100%);
+      color: #ffffff !important;
+      font-weight: 700;
+      box-shadow: 0 4px 15px -2px rgba(245, 158, 11, 0.4);
+    }
+
+    /* 自定義捲軸 */
+    ::-webkit-scrollbar {
+      width: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #f59e0b;
+    }
+
+    /* 黏土立體按鈕陰影 */
+    .clay-btn {
+      box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 10px 20px -3px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .clay-btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 4px 10px -2px rgba(0, 0, 0, 0.4);
+    }
+
+    /* 微縮浮空標籤氣泡 */
+    .floating-bubble {
+      box-shadow: 0 12px 28px -5px rgba(0, 0, 0, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.35);
+      animation: floatBreath 4s ease-in-out infinite;
+    }
+
+    @keyframes floatBreath {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-5px); }
+    }
+
+    /* 互動元件動畫 */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+    .pulse-glow {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+
+<body class="relative w-screen h-screen overflow-hidden text-slate-100">
+
+  <!-- 3D WebGL 畫布容器 -->
+  <div id="webgl-container" class="absolute inset-0 z-0 cursor-grab active:cursor-grabbing"></div>
+
+  <!-- 移軸景深與光學暗角遮罩層 -->
+  <div class="tilt-shift-top"></div>
+  <div class="tilt-shift-bottom"></div>
+  <div class="vignette-clay"></div>
+
+  <!-- 頂部導航控制列 -->
+  <header class="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+    <!-- 標題與 STELLA Badge -->
+    <div class="flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-2xl pointer-events-auto transition-transform hover:scale-[1.01]">
+      <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/25">
+        <i class="fa-solid fa-atom text-2xl animate-spin" style="animation-duration: 20s;"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-300 font-bold border border-amber-400/40">STELLA 7上自然</span>
+          <span class="text-xs text-slate-400">第2章：生物體的能量與代謝</span>
+        </div>
+        <h1 class="text-base sm:text-lg font-black tracking-wide text-white drop-shadow flex items-center gap-2">
+          3D 互動教學微縮群島
+          <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-mono">WebGL 60FPS</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- 快速島嶼巡航按鈕組 -->
+    <nav class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-2xl pointer-events-auto overflow-x-auto max-w-full">
+      <button onclick="zoomToIsland('home')" id="nav-btn-home" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-amber-400 bg-white/10 flex items-center gap-1.5">
+        <i class="fa-solid fa-solar-system"></i><span class="hidden md:inline">全景導覽</span>
+      </button>
+      <button onclick="zoomToIsland('2-1')" id="nav-btn-2-1" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400"></span>2-1 養分能量
+      </button>
+      <button onclick="zoomToIsland('2-2')" id="nav-btn-2-2" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400"></span>2-2 酵素催化
+      </button>
+      <button onclick="zoomToIsland('2-3')" id="nav-btn-2-3" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400"></span>2-3 光合作用
+      </button>
+      <button onclick="zoomToIsland('2-4')" id="nav-btn-2-4" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all hover:bg-white/10 active:scale-95 text-slate-300 flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-sm shadow-rose-400"></span>2-4 消化吸收
+      </button>
+    </nav>
+
+    <!-- 右上快捷操作工具 (自動巡航/公轉加乘/聲音/指南) -->
+    <div class="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-2xl pointer-events-auto">
+      <button onclick="toggleAutoRotate()" id="btn-rotate" title="切換鏡頭慢速環繞巡航" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-amber-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+      <button onclick="toggleSolarSpeed()" id="btn-speed" title="行星公轉速度加乘 (1x / 3x)" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-cyan-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-forward-step"></i>
+      </button>
+      <button onclick="toggleSoundFX()" id="btn-sound" title="音效開關" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-emerald-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-volume-high"></i>
+      </button>
+      <button onclick="toggleHelpModal()" title="操作指南與美學架構" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-purple-400 transition-transform active:scale-90">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 3D 懸浮互動說明氣泡 (底端中) -->
+  <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none text-center">
+    <div class="floating-bubble px-4 py-2.5 rounded-full bg-slate-900/85 border border-white/15 backdrop-blur-md text-xs sm:text-sm text-slate-200 flex items-center gap-2.5 shadow-2xl">
+      <i class="fa-solid fa-hand-pointer text-amber-400 animate-bounce"></i>
+      <span>點選任意<b>浮空微縮島嶼</b>或<b>上方按鈕</b>開啟章節全方位教材</span>
+      <span class="hidden sm:inline text-slate-400">| 滑鼠拖曳旋轉、滾輪平滑縮放</span>
+    </div>
+  </div>
+
+  <!-- 九大天體背景巡航圖例 (左下角) -->
+  <div class="absolute bottom-6 left-6 z-10 hidden xl:flex flex-col gap-1.5 p-3.5 rounded-2xl bg-slate-900/75 border border-white/10 backdrop-blur-md text-[11px] text-slate-300 pointer-events-none shadow-xl">
+    <span class="font-bold text-amber-300 mb-0.5 flex items-center gap-1.5">
+      <i class="fa-solid fa-globe"></i> 太陽系 9 大天體巡航背景
+    </span>
+    <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-500"></span> 太陽 Sun & 水星</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-200"></span> 金星 Venus</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500"></span> 地球 Earth & 月球</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 火星 Mars</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span> 木星 Jupiter</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-yellow-600"></span> 帶環土星 Saturn</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> 天王星 Uranus</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span> 海王星 Neptune</span>
+    </div>
+  </div>
+
+  <!-- 課程學習彈出面板 (互動大抽屜 Glassmorphism) -->
+  <aside id="lesson-panel" class="fixed inset-y-0 right-0 w-full sm:w-[580px] md:w-[640px] lg:w-[680px] z-30 transform translate-x-full transition-transform duration-500 ease-out glassmorphism shadow-2xl flex flex-col border-l border-white/15">
+    <!-- 面板標題列 -->
+    <div class="p-5 pb-3 border-b border-white/10 flex items-center justify-between bg-slate-950/40">
+      <div class="flex items-center gap-3">
+        <div id="panel-icon-wrap" class="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg transition-transform hover:scale-105">
+          <i id="panel-icon" class="fa-solid fa-burger"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="panel-badge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/25 text-amber-300 border border-amber-400/30">單元 2-1</span>
+            <span class="text-xs text-slate-400 font-medium">STELLA 核心素養教材</span>
+          </div>
+          <h2 id="panel-title" class="text-lg sm:text-xl font-black text-white tracking-wide">養分與能量</h2>
+        </div>
+      </div>
+      <button onclick="closeLessonPanel()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-transform active:scale-90" title="關閉面板 (ESC)">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- 頁籤切換 Tabs (重點整理、會考測驗、影音課堂、STEALA 探究) -->
+    <div class="flex border-b border-white/10 px-3 bg-slate-950/60">
+      <button onclick="switchTab('notes')" id="tab-notes" class="flex-1 py-3 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-all border-b-2 border-transparent flex items-center justify-center gap-1.5 glass-tab-active">
+        <i class="fa-solid fa-book-open"></i>重點圖解
+      </button>
+      <button onclick="switchTab('quiz')" id="tab-quiz" class="flex-1 py-3 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-all border-b-2 border-transparent flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-graduation-cap"></i>會考評量
+      </button>
+      <button onclick="switchTab('video')" id="tab-video" class="flex-1 py-3 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-all border-b-2 border-transparent flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-circle-play"></i>影音精華
+      </button>
+      <button onclick="switchTab('steala')" id="tab-steala" class="flex-1 py-3 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-all border-b-2 border-transparent flex items-center justify-center gap-1.5">
+        <i class="fa-solid fa-rocket"></i>STELLA探究
+      </button>
+    </div>
+
+    <!-- 內容滾動展示區塊 -->
+    <div id="panel-content-area" class="flex-1 overflow-y-auto p-5 space-y-4">
+      <!-- 內容由 JavaScript 動態填入 -->
+    </div>
+
+    <!-- 面板底部切換按鈕列 -->
+    <div class="p-4 border-t border-white/10 bg-slate-900/80 flex items-center justify-between">
+      <button onclick="prevIsland()" class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-xs text-slate-300 font-semibold flex items-center gap-1.5 transition-colors active:scale-95">
+        <i class="fa-solid fa-arrow-left"></i> 上一單元
+      </button>
+      <span id="panel-page-indicator" class="text-xs font-mono text-slate-400">單元 1 / 4</span>
+      <button onclick="nextIsland()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:brightness-110 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/25 transition-transform active:scale-95">
+        下一單元 <i class="fa-solid fa-arrow-right"></i>
+      </button>
+    </div>
+  </aside>
+
+  <!-- 操作指南說明 Modal -->
+  <div id="help-modal" class="fixed inset-0 z-40 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-white/20 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative text-slate-200 space-y-4 animate-fadeIn">
+      <button onclick="toggleHelpModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white w-8 h-8 rounded-full bg-white/10 flex items-center justify-center transition-colors">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-400 flex items-center justify-center text-xl">
+          <i class="fa-solid fa-compass"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">微縮群島探索與 WebGL 優化指南</h3>
+          <p class="text-xs text-slate-400">Tilt-shift Miniature & Clay Aesthetic Architecture</p>
+        </div>
+      </div>
+      <ul class="space-y-3 text-xs sm:text-sm text-slate-300">
+        <li class="flex items-start gap-2.5">
+          <i class="fa-solid fa-microchip text-emerald-400 mt-1"></i>
+          <span><b>WebGL 架構優化：</b>採用幾何共享緩存（Geometry/Material Cache Pool）、單一主陰影錐體、動態時間阻尼（Exponential Damping）與防突波幀率平滑演算法。</span>
+        </li>
+        <li class="flex items-start gap-2.5">
+          <i class="fa-solid fa-palette text-amber-400 mt-1"></i>
+          <span><b>黏土移軸美學 (Clay Aesthetic)：</b>高粗糙度無金屬質感漫反射材質，搭配上下移軸模糊（Tilt-shift）與柔和暗角（Vignette）。</span>
+        </li>
+        <li class="flex items-start gap-2.5">
+          <i class="fa-solid fa-planet-ringed text-cyan-400 mt-1"></i>
+          <span><b>九大天體星系：</b>遠景配置太陽與八大行星物理公轉軌道、光環與粒子星海，可切換 3x 超速巡航。</span>
+        </li>
+        <li class="flex items-start gap-2.5">
+          <i class="fa-solid fa-cubes text-rose-400 mt-1"></i>
+          <span><b>四大單元島嶼：</b>2-1 養分能量、2-2 酵素催化、2-3 光合作用、2-4 消化吸收，含歷屆會考題庫與 STELLA 探究。</span>
+        </li>
+      </ul>
+      <div class="pt-2 border-t border-white/10 text-center">
+        <button onclick="toggleHelpModal()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-white font-bold hover:brightness-110 shadow-lg text-sm">
+          進入微縮群島探索
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D 核心與單元互動代碼 -->
+  <script>
+    /* ==========================================================================
+       0. Web Audio API 自適應無外部依賴音效合成器 (Sound Synthesizer)
+       ========================================================================== */
+    const SoundFX = {
+      enabled: true,
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      },
+      playClick() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(480, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(720, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      },
+      playCorrect() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.15, now + idx * 0.08);
+          gain.gain.linearRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.25);
+        });
+      },
+      playWrong() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.linearRampToValueAtTime(140, now + 0.2);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.linearRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+    };
+
+    function toggleSoundFX() {
+      SoundFX.enabled = !SoundFX.enabled;
+      const btn = document.getElementById('btn-sound');
+      if (SoundFX.enabled) {
+        btn.classList.add('text-emerald-400');
+        btn.classList.remove('text-slate-500');
+        btn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+        SoundFX.playClick();
+      } else {
+        btn.classList.remove('text-emerald-400');
+        btn.classList.add('text-slate-500');
+        btn.innerHTML = '<i class="fa-solid fa-volume-xmark"></i>';
+      }
+    }
+
+    /* ==========================================================================
+       1. 國中自然 7 上 第 2 章 完整課程數據庫 (忠於 docx 來源與歷屆會考真題)
+       ========================================================================== */
+    const CHAPTER_DATA = {
+      '2-1': {
+        code: '2-1',
+        title: '食物中的養分與能量',
+        sub: '六大營養素、熱量計算、碘液與本氏液實驗檢驗',
+        badge: '單元 2-1',
+        themeColor: '#f59e0b',
+        islandPos: { x: -32, y: 0, z: -25 },
+        cameraPos: { x: -32, y: 19, z: 14 },
+        icon: 'fa-solid fa-burger',
+        notes: `
+          <div class="space-y-4 text-xs sm:text-sm">
+            <!-- 核心概念導引 -->
+            <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 leading-relaxed">
+              <h4 class="font-bold text-amber-300 text-sm sm:text-base mb-1.5 flex items-center gap-2">
+                <i class="fa-solid fa-fire-flame-curved text-amber-400"></i> 焦點一：六大養分與熱量換算核心
+              </h4>
+              <p class="text-slate-200">
+                生物體在「休息或睡眠」時，心跳、呼吸與細胞代謝仍持續進行，維持生命最低所需之能量稱為<b>基礎代謝率</b>。
+                養分依據「能否產生能量」可分為兩大類：
+              </p>
+            </div>
+
+            <!-- 六大養分分類比較表 -->
+            <div class="overflow-x-auto rounded-xl border border-white/10 shadow-lg">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-amber-500/20 text-amber-200">
+                  <tr>
+                    <th class="p-2.5">分類</th>
+                    <th class="p-2.5">養分項目</th>
+                    <th class="p-2.5">每克產熱</th>
+                    <th class="p-2.5">主要生理功能與來源</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/10 bg-slate-900/70 text-slate-300">
+                  <tr>
+                    <td class="p-2.5 font-bold text-amber-400">產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">醣類 (碳水化合物)</td>
+                    <td class="p-2.5 font-mono text-amber-300 font-bold">4 kcal/g</td>
+                    <td class="p-2.5">人體最主要的熱量來源（五穀根莖、米飯麵食）</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-amber-400">產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">蛋白質</td>
+                    <td class="p-2.5 font-mono text-amber-300 font-bold">4 kcal/g</td>
+                    <td class="p-2.5">建造肌肉與修補細胞組織之主要原料、構成酵素（肉魚蛋豆）</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-amber-400">產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">脂質</td>
+                    <td class="p-2.5 font-mono text-rose-400 font-bold">9 kcal/g</td>
+                    <td class="p-2.5">產熱最高、儲存能量、保持體溫、保護內臟（動植物油脂）</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-cyan-400">不產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">水 (佔體重約70%)</td>
+                    <td class="p-2.5 font-mono text-slate-400">0 kcal/g</td>
+                    <td class="p-2.5">良好溶劑、運送養分與代謝廢物、調節體溫</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-cyan-400">不產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">礦物質 (鈣、鐵、鈉等)</td>
+                    <td class="p-2.5 font-mono text-slate-400">0 kcal/g</td>
+                    <td class="p-2.5">構成骨骼牙齒 (鈣)、血紅素原料 (鐵)、神經傳導</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-cyan-400">不產能養分</td>
+                    <td class="p-2.5 font-semibold text-white">維生素 (A、B、C、D等)</td>
+                    <td class="p-2.5 font-mono text-slate-400">0 kcal/g</td>
+                    <td class="p-2.5">維持生理機能與酵素活性。缺乏A夜盲、缺乏C壞血症</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 口訣與熱量公式卡 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <div class="text-xs font-bold text-amber-300 mb-1 flex items-center gap-1.5">
+                  <i class="fa-solid fa-calculator"></i> 熱量換算必背口訣
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  1 卡 (cal) = 1g 水上升 1 ℃ 所需熱量。<br>
+                  1 大卡 (kcal) = 1000 卡 = 1000g 水上升 1 ℃。<br>
+                  <span class="text-amber-300 font-bold">口訣：脂九 (9) 醣四 (4) 蛋白四 (4)！</span>
+                </p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <div class="text-xs font-bold text-rose-400 mb-1 flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation"></i> 常見會考陷阱破題
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  燃燒食物測定熱量時，部分熱量會散失至空氣或容器吸收，故測得數值<b>通常小於真實熱量</b>！水與維生素不產能但不可或缺。
+                </p>
+              </div>
+            </div>
+
+            <!-- 實驗檢驗對照：碘液 vs 本氏液 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+              <div class="font-bold text-amber-300 text-xs flex items-center gap-2">
+                <i class="fa-solid fa-vial-circle-check"></i> 必考核心實驗：食物中醣類的測定（碘液 ╳ 本氏液）
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <div class="p-2.5 rounded-lg bg-slate-800/60 border border-amber-400/20">
+                  <b class="text-amber-300 block mb-1">【碘液檢測】測定「澱粉」</b>
+                  <p class="text-slate-300">
+                    • 初始顏色：黃褐色<br>
+                    • 檢驗澱粉結果：<b>藍黑色</b>（不需加熱）<br>
+                    • 例：米飯加碘液呈藍黑色；芭樂果糖不變色仍為黃褐色。
+                  </p>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-800/60 border border-cyan-400/20">
+                  <b class="text-cyan-300 block mb-1">【本氏液檢測】測定「葡萄糖/還原糖」</b>
+                  <p class="text-slate-300">
+                    • 初始顏色：淡藍色<br>
+                    • 必須<b>隔水加熱</b>（防受熱不均突沸噴濺）<br>
+                    • 呈色半定量：藍(無) ➔ 綠(極少) ➔ 黃 ➔ 橙 ➔ <b>紅(極多)</b>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        quiz: [
+          {
+            q: "下列哪些情況需要養分來維持生命？ (甲)休息或睡覺時；(乙)呼吸時；(丙)運動時。",
+            options: ["甲乙丙皆需要", "僅甲乙", "僅乙丙", "僅甲丙"],
+            correct: 0,
+            analysis: "【名師破題指引】：生物體即使在睡眠或靜止休息時，體內細胞仍持續進行心跳、呼吸、維持體溫與物質合成等新陳代謝（稱為基礎代謝率），因此無論任何生理狀態皆需要養分供應能量。故選 (A)。"
+          },
+          {
+            q: "某牌高纖餅乾每包重 100 公克，營養標示含有：蛋白質 10 公克、脂肪 10 公克、碳水化合物 (醣類) 50 公克、鈉 200 毫克、水分 20 公克、維生素 10 公克。請問吃下這一包餅乾共可獲得多少大卡 (kcal) 的熱量？",
+            options: ["330 大卡", "370 大卡", "410 大卡", "530 大卡"],
+            correct: 0,
+            analysis: "【熱量運算】：產能養分為醣類、蛋白質與脂肪。\n• 醣類：50g × 4 kcal/g = 200 kcal\n• 蛋白質：10g × 4 kcal/g = 40 kcal\n• 脂肪：10g × 9 kcal/g = 90 kcal\n• 水分、鈉、維生素不產生能量 (0 kcal)\n總熱量 = 200 + 40 + 90 = 330 kcal。故選 (A)。"
+          },
+          {
+            q: "憲宇平日飲食不均衡，經醫師診斷罹患「壞血病」（牙齦易出血）。請問他平日應多加補充下列何種營養素？",
+            options: ["維生素 A", "維生素 C", "維生素 D", "蛋白質"],
+            correct: 1,
+            analysis: "【速記口訣】：\n• 維生素 A：夜盲症\n• 維生素 B1：腳氣病\n• 維生素 C：壞血病（新鮮蔬果柑橘豐富）\n• 維生素 D：佝僂症/軟骨症。\n故選 (B)。"
+          },
+          {
+            q: "在「測定食物中醣類」實驗中，為何將本氏液加入待測液後，必須放在盛有熱水的燒杯中「隔水加熱」，而不能用酒精燈直接加熱試管？",
+            options: [
+              "直接加熱會破壞本氏液的藍色染料",
+              "使試管均勻受熱，避免劇烈突沸噴濺造成危險",
+              "隔水加熱才能讓澱粉分解為葡萄糖",
+              "水溫需達到 150℃ 本氏液才會反應"
+            ],
+            correct: 1,
+            analysis: "【實驗陷阱防線】：試管管徑狹小，若以明火直接加熱局部液體，極易引發「突沸」使高溫化學藥液噴濺傷人；採隔水加熱能確保受熱均勻平緩，燒杯水面應高於試管內液面。故選 (B)。"
+          }
+        ],
+        video: {
+          title: "自然2-1實驗破解食物隱藏糖分！兩個必學的醣類實測",
+          file: "自然2-1實驗破解食物隱藏糖分！兩個必學的醣類實測.mp4",
+          altFile: "自然2-1生物段考秘笈：食物中的養分與能量.mp4",
+          duration: "08:15",
+          thumbnailDesc: "米飯 vs 芭樂之碘液澱粉檢驗與本氏液隔水加熱呈色光譜",
+          timestamps: [
+            { time: "00:45", label: "六大營養素產能與基礎代謝率概念" },
+            { time: "02:20", label: "卡計熱量測定：花生燃燒水溫變化實測" },
+            { time: "04:10", label: "碘液檢驗澱粉操作與黃褐轉藍黑反應" },
+            { time: "06:15", label: "本氏液半定量色彩梯度（藍綠黃橙紅）" }
+          ]
+        },
+        steala: {
+          s: "<b>Science (科學探究)：</b>探討堅果類（核桃、腰果）與澱粉類（洋芋片）在燃燒測定卡路里時的熱逸散率與燃燒完全度。",
+          t: "<b>Technology (數位科技)：</b>使用數位溫度探針結合 Micro:bit 記錄每秒水溫升降曲線，即時運算熱吸收率。",
+          e: "<b>Engineering (工程設計)：</b>設計具備隔熱反光內膽與防風罩的微型環保卡計，將熱能散失率壓低至 12% 以下。",
+          a: "<b>Arts (藝術美感)：</b>繪製一份極簡 Apple 風格的「青春期我的健康一日餐盤」六大養分黏土資訊圖卡。",
+          la: "<b>Language Arts (語文倡議)：</b>為校園健康中心撰寫一份「遠離高糖高鈉！守護青少年健康的營養標示指南」倡議書。"
+        }
+      },
+
+      '2-2': {
+        code: '2-2',
+        title: '酵素的作用 (生物催化劑)',
+        sub: '專一性、重複使用、受質活性位點、溫度與 pH 活性曲線',
+        badge: '單元 2-2',
+        themeColor: '#06b6d4',
+        islandPos: { x: 32, y: 0, z: -25 },
+        cameraPos: { x: 32, y: 19, z: 14 },
+        icon: 'fa-solid fa-dna',
+        notes: `
+          <div class="space-y-4 text-xs sm:text-sm">
+            <div class="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/25 leading-relaxed">
+              <h4 class="font-bold text-cyan-300 text-sm sm:text-base mb-1.5 flex items-center gap-2">
+                <i class="fa-solid fa-shapes text-cyan-400"></i> 焦點一：酵素本質與代謝作用核心架構
+              </h4>
+              <p class="text-slate-200">
+                生物體內所有「化學反應」的總稱稱為<b>代謝作用 (Metabolism)</b>。
+                包括將大分子切成小分子的<b>分解作用</b>（如消化、呼吸，釋放能量），
+                與小分子合成大分子的<b>合成作用</b>（如光合作用、合成蛋白質，消耗能量）。
+                <b>易錯陷阱：</b>擴散作用與滲透作用屬於物理性跨膜運輸，『不屬於』代謝反應！
+              </p>
+            </div>
+
+            <!-- 酵素四大特性 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <span class="text-xs font-bold text-cyan-300 block mb-1">
+                  <i class="fa-solid fa-feather mr-1"></i> 特性 1：主成分為蛋白質
+                </span>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  對溫度與酸鹼極度敏感。高溫（60℃以上）會使蛋白質立體結構破壞而<b>永久變性失活</b>，冷卻亦無法復原！
+                </p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <span class="text-xs font-bold text-indigo-300 block mb-1">
+                  <i class="fa-solid fa-bolt mr-1"></i> 特性 2：改變反應速率
+                </span>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  酵素能降低活化能、加速化學反應，但<b>不能</b>引發本來不會發生的化學反應，亦<b>不改變生成物總量</b>。
+                </p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <span class="text-xs font-bold text-emerald-300 block mb-1">
+                  <i class="fa-solid fa-recycle mr-1"></i> 特性 3：可重複使用
+                </span>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  酵素參與催化過程，但反應前後其<b>質量與化學結構皆不改變</b>，釋出產物後可立即與新受質結合。
+                </p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10">
+                <span class="text-xs font-bold text-amber-300 block mb-1">
+                  <i class="fa-solid fa-key mr-1"></i> 特性 4：專一性 (Lock & Key)
+                </span>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  一種酵素通常只能催化一種特定受質。唾液澱粉酶只能催化澱粉分解，無法分解蛋白質或脂質。
+                </p>
+              </div>
+            </div>
+
+            <!-- 影響活性兩大環境因子 -->
+            <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10 space-y-2">
+              <h5 class="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-chart-line"></i> 影響酵素活性的兩大關鍵曲線
+              </h5>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div class="p-2.5 rounded-lg bg-slate-900/70 border border-rose-500/20">
+                  <b class="text-rose-400 block mb-1">溫度 (Temperature)：</b>
+                  <p class="text-slate-300 leading-relaxed">
+                    低溫時酵素活性降低，但回溫後活性<b>可恢復</b>；超過最適溫度高溫加熱（如 100℃ 沸水），酵素永久變性，回溫後<b>無法復原</b>。
+                  </p>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-900/70 border border-emerald-500/20">
+                  <b class="text-emerald-400 block mb-1">酸鹼值 (pH)：</b>
+                  <p class="text-slate-300 leading-relaxed">
+                    不同酵素最適 pH 各不相同：<b>胃蛋白酶</b>最適為強酸 (pH ≈ 2)；<b>唾液澱粉酶</b>近中性 (pH ≈ 7)；<b>胰液/腸液酵素</b>最適為弱鹼 (pH ≈ 8)。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        quiz: [
+          {
+            q: "代謝作用中，將較大分子轉變成較小分子並釋放能量的化學反應稱為什麼？",
+            options: ["分解作用", "合成作用", "擴散作用", "滲透作用"],
+            correct: 0,
+            analysis: "【名師破題指引】：代謝作用分為合成（小變大，吸能）與分解（大變小，釋能）。擴散與滲透為物理跨膜現象不屬化學代謝。故選 (A)。"
+          },
+          {
+            q: "小玟將新鮮唾液分成甲、乙兩管。甲管置於 37℃ 水浴中，乙管置於 100℃ 沸水中加熱 15 分鐘後冷卻回 37℃。接著在兩管加入等量澱粉液，30 分鐘後滴加本氏液隔水加熱。下列預期結果何者正確？",
+            options: [
+              "甲、乙兩管皆呈現綠色或黃橙色",
+              "甲管呈黃橙色（有糖），乙管維持淡藍色（無糖）",
+              "甲管維持藍色，乙管呈黃橙色",
+              "兩管皆維持原本淡藍色"
+            ],
+            correct: 1,
+            analysis: "【名師破題指引】：唾液含有唾液澱粉酶。甲管在 37℃ 能順利將澱粉水解為麥芽糖（具還原糖性質，本氏液隔水加熱呈黃橙色）；乙管經 100℃ 沸水加熱後，蛋白質立體結構已被高溫破壞永久變性失活，降溫回 37℃ 亦無法催化澱粉分解，本氏液維持原本藍色。故選 (B)。"
+          },
+          {
+            q: "人體三種主要消化酵素甲、乙、丙之最適 pH 值分別為 2、7、8。請問這三種酵素最可能依序為何者？",
+            options: [
+              "甲：胃蛋白酶，乙：唾液澱粉酶，丙：胰蛋白酶",
+              "甲：唾液澱粉酶，乙：胃蛋白酶，丙：胰脂酶",
+              "甲：胰蛋白酶，乙：胃蛋白酶，丙：唾液澱粉酶",
+              "甲：胃蛋白酶，乙：胰蛋白酶，丙：唾液澱粉酶"
+            ],
+            correct: 0,
+            analysis: "【名師破題指引】：胃液強酸 (pH 2) 適合胃蛋白酶；口腔唾液接近中性 (pH 7) 適合唾液澱粉酶；小腸中的胰液與腸液呈弱鹼性 (pH 8) 適合胰蛋白酶與腸液酵素。故選 (A)。"
+          },
+          {
+            q: "關於酵素特性的敘述，下列何者「錯誤」？",
+            options: [
+              "酵素的主要成分為蛋白質",
+              "酵素催化反應後，本身質量與化學結構不變，可重複使用",
+              "酵素能引發原本不可能發生的化學反應，並增加生成物總量",
+              "酵素具有專一性，如同鑰匙與鎖孔配對"
+            ],
+            correct: 2,
+            analysis: "【名師破題指引】：酵素僅能藉由降低活化能「加速已存在的反應速率」，絕對無法引發本來不會發生的反應，也無法增加最終化學平衡時的生成物總量。故 (C) 錯誤。"
+          }
+        ],
+        video: {
+          title: "自然2-2酵素實驗：為什麼煮沸的口水沒用了？",
+          file: "自然2-2酵素實驗：為什麼煮沸的口水沒用了？.mp4",
+          altFile: "自然2-2：酵素的作用與實驗.mp4",
+          duration: "06:40",
+          thumbnailDesc: "3D 分子結構拆解：受質與酵素活性位專一性結合與高溫變性",
+          timestamps: [
+            { time: "00:40", label: "代謝作用：合成 vs 分解能量流動" },
+            { time: "02:10", label: "鎖與鑰匙模型：酵素活性位點立體構形" },
+            { time: "03:50", label: "煮沸口水實測：高溫熱變性不可逆實驗" },
+            { time: "05:15", label: "胃酸、唾液、小腸液 pH 最適活性曲線圖" }
+          ]
+        },
+        steala: {
+          s: "<b>Science (科學探究)：</b>探究植物性過氧化氫酶（馬鈴薯或紅蘿蔔）在不同 pH 緩衝液環境下的分解雙氧水產氧速率。",
+          t: "<b>Technology (數位科技)：</b>利用智慧手機高格率慢動作錄影與 ImageJ 軟體，量化分析試管泡沫柱上升高度。",
+          e: "<b>Engineering (工程設計)：</b>設計一座「恆溫可調式水浴槽」，利用熱敏電阻與繼電器控制水溫恆定於 37±0.5℃。",
+          a: "<b>Arts (藝術美感)：</b>以超輕黏土捏塑出受質 (Substrate)、活性位 (Active Site) 與酵素產物之可拆卸立體教具。",
+          la: "<b>Language Arts (語文倡議)：</b>以「一把鑰匙的自白：我在活性位上的奇幻催化之旅」為題撰寫 500 字科普小說。"
+        }
+      },
+
+      '2-3': {
+        code: '2-3',
+        title: '植物的光合作用',
+        sub: '葉片解剖構造、光反應與碳反應雙階段、光合作用產物檢驗',
+        badge: '單元 2-3',
+        themeColor: '#10b981',
+        islandPos: { x: -32, y: 0, z: 25 },
+        cameraPos: { x: -32, y: 19, z: 64 },
+        icon: 'fa-solid fa-leaf',
+        notes: `
+          <div class="space-y-4 text-xs sm:text-sm">
+            <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 leading-relaxed">
+              <h4 class="font-bold text-emerald-300 text-sm sm:text-base mb-1.5 flex items-center gap-2">
+                <i class="fa-solid fa-sun text-emerald-400"></i> 焦點一：地球能量源頭——光合作用總方程式
+              </h4>
+              <p class="text-slate-200">
+                綠色植物藉由葉綠體吸收太陽光能，將<b>水與二氧化碳</b>轉換為<b>葡萄糖、氧氣與水</b>。<br>
+                <span class="font-mono text-emerald-300 font-bold">水 + 二氧化碳 ──(光能、葉綠體)──➔ 氧氣 + 葡萄糖 + 水</span><br>
+                <b>重要考點：</b>光合作用的「反應物」與「產物」中<b>都有水</b>！能量轉化是將太陽光能轉化為葡萄糖中的化學能。
+              </p>
+            </div>
+
+            <!-- 葉片微觀解剖速記表 -->
+            <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10 space-y-2">
+              <div class="font-bold text-emerald-300 text-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-layer-group"></i> 葉片微觀解剖構造速記口訣
+              </div>
+              <p class="text-xs text-amber-300 font-bold">
+                「表皮透光無葉綠，保衛半月成雙對；葉肉飽滿行光合，角質防水脈通送！」
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-white/5">
+                  <b class="text-white block mb-0.5">角質層</b>
+                  透明蠟質，防止水分過度散失
+                </div>
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-white/5">
+                  <b class="text-white block mb-0.5">表皮細胞</b>
+                  排列緊密透明，<b>不含葉綠體</b>
+                </div>
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-emerald-400/30">
+                  <b class="text-emerald-300 block mb-0.5">保衛細胞</b>
+                  成雙半月形，<b>含葉綠體</b>控制氣孔
+                </div>
+                <div class="bg-slate-900/70 p-2 rounded-lg border border-emerald-400/30">
+                  <b class="text-emerald-300 block mb-0.5">葉肉組織</b>
+                  柵狀與海綿組織，<b>富含葉綠體</b>行光合
+                </div>
+              </div>
+            </div>
+
+            <!-- 光反應 vs 碳反應雙階段比較 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10 space-y-1">
+                <div class="font-bold text-amber-300 flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> 第一階段：光反應 (需光)
+                </div>
+                <p class="text-slate-300">• <b>場所：</b>葉綠餅囊狀膜</p>
+                <p class="text-slate-300">• <b>反應物：</b>水 ($H_2O$)、光能、葉綠素</p>
+                <p class="text-slate-300">• <b>產物：</b><b>氧氣 ($O_2$) 釋放</b>、能量分子 (ATP)</p>
+                <p class="text-slate-400 text-[11px]">葉綠素吸收光能，將水裂解釋出氧氣，並產生能量推動第二階段。</p>
+              </div>
+              <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10 space-y-1">
+                <div class="font-bold text-cyan-300 flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> 第二階段：碳反應/暗反應 (需酵素)
+                </div>
+                <p class="text-slate-300">• <b>場所：</b>葉綠體基質 (Stroma)</p>
+                <p class="text-slate-300">• <b>反應物：</b>二氧化碳 ($CO_2$)、利用光反應能量</p>
+                <p class="text-slate-300">• <b>產物：</b><b>葡萄糖 ($C_6H_{12}O_6$)</b>、水 ($H_2O$)</p>
+                <p class="text-slate-400 text-[11px]">不需光直接照射，由多種酵素催化合成葡萄糖，多餘糖類轉為澱粉儲存。</p>
+              </div>
+            </div>
+
+            <!-- 光合作用實驗四部曲 -->
+            <div class="p-3.5 rounded-xl bg-slate-900/80 border border-white/10 space-y-2 text-xs">
+              <h5 class="font-bold text-emerald-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-flask-vial"></i> 必考核心實驗：光合產物檢驗四部曲
+              </h5>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-slate-300">
+                <div class="bg-slate-800/80 p-2.5 rounded-lg border border-white/10">
+                  <span class="text-amber-400 font-bold block mb-1">1. 沸水煮沸</span>
+                  破壞葉肉細胞膜與角質層，使細胞死亡
+                </div>
+                <div class="bg-slate-800/80 p-2.5 rounded-lg border border-rose-400/30">
+                  <span class="text-rose-400 font-bold block mb-1">2. 隔水酒精脫色</span>
+                  溶解並洗去綠色葉綠素，避免干擾呈色
+                </div>
+                <div class="bg-slate-800/80 p-2.5 rounded-lg border border-white/10">
+                  <span class="text-cyan-400 font-bold block mb-1">3. 溫水漂洗</span>
+                  洗除殘留酒精並軟化變脆的葉片
+                </div>
+                <div class="bg-slate-800/80 p-2.5 rounded-lg border border-purple-400/30">
+                  <span class="text-purple-400 font-bold block mb-1">4. 滴加碘液</span>
+                  照光區有澱粉變<b>藍黑色</b>；遮光區維持黃褐色
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        quiz: [
+          {
+            q: "整片綠色葉片中，下列哪些細胞含有葉綠體，能夠進行光合作用？\n(甲)上表皮細胞；(乙)保衛細胞；(丙)葉肉細胞；(丁)葉脈木質部細胞。",
+            options: ["僅乙丙", "僅甲乙", "僅丙丁", "甲乙丙丁皆有"],
+            correct: 0,
+            analysis: "【會考必背陷阱】：整片葉子中，只有「保衛細胞」和「葉肉細胞」含有葉綠體；表皮細胞透光保護無葉綠體，葉脈為輸導組織亦無葉綠體。故選 (A)。"
+          },
+          {
+            q: "小玟在彩葉草葉片上黏貼十字形遮光黑紙，置於陽光下照射數天後取下黑紙，依序進行「沸水煮沸 ➔ 隔水加熱酒精 ➔ 溫水漂洗 ➔ 滴加碘液」實驗。請問未遮光處與遮光處的最終顏色依序為何？",
+            options: [
+              "未遮光區：黃褐色；遮光區：藍黑色",
+              "未遮光區：藍黑色；遮光區：黃褐色",
+              "兩區皆維持原本的綠色",
+              "兩區皆呈現透明無色"
+            ],
+            correct: 1,
+            analysis: "【名師破題指引】：未遮光區能正常行光合作用產生葡萄糖並儲存為澱粉，遇碘液呈「藍黑色」；遮光區缺乏陽光無法行光合作用無澱粉產生，滴加碘液後維持原本碘液的「黃褐色」。故選 (B)。"
+          },
+          {
+            q: "在「測定光合作用產物」實驗中，脫色步驟必須將葉片置於酒精中並「隔水加熱」，其最主要的考量為何？",
+            options: [
+              "避免葉片過度碳化變黑",
+              "酒精易揮發且燃點低，直接以明火加熱易引發火災燃燒危險",
+              "水溫需達到 150℃ 才能有效溶解葉綠素",
+              "酒精直接受熱會產生劇毒光氣"
+            ],
+            correct: 1,
+            analysis: "【實驗安全考量】：酒精沸點約 78℃ 且極具易燃性，直接明火加熱極易引燃酒精蒸氣引發火警，故必須使用熱水隔水安全加熱。故選 (B)。"
+          },
+          {
+            q: "光合作用的兩階段中，釋出「氧氣」與製造「葡萄糖」分別發生在何處？",
+            options: [
+              "氧氣：光反應；葡萄糖：碳反應（暗反應）",
+              "氧氣：碳反應；葡萄糖：光反應",
+              "兩者皆在光反應產生",
+              "兩者皆在碳反應產生"
+            ],
+            correct: 0,
+            analysis: "【光合雙階段對照】：光反應利用光能將水 ($H_2O$) 分解釋放出「氧氣 ($O_2$)」；碳反應利用光反應產生的能量將二氧化碳 ($CO_2$) 合成為「葡萄糖 ($C_6H_{12}O_6$)」。故選 (A)。"
+          }
+        ],
+        video: {
+          title: "自然2-3光合作用實驗解析 & 植物養分密碼",
+          file: "自然2-3光合作用實驗解析.mp4",
+          altFile: "自然2-3植物養分密碼.mp4",
+          duration: "07:35",
+          thumbnailDesc: "彩葉草遮光與酒精隔水加熱脫色全紀錄、顯微鏡保衛細胞氣孔開閉",
+          timestamps: [
+            { time: "00:30", label: "葉片橫切面解剖：角質層、表皮、葉肉與葉脈" },
+            { time: "02:15", label: "光反應水裂解釋放氧氣微觀動態" },
+            { time: "04:10", label: "隔水酒精脫色操作技巧與安全規範" },
+            { time: "05:55", label: "碘液澱粉呈色與對照組遮光十字解析" }
+          ]
+        },
+        steala: {
+          s: "<b>Science (科學探究)：</b>探討水蘊草在不同色光 LED（紅光、藍光、綠光）照射下，每分鐘釋放氧氣氣泡速率之差異。",
+          t: "<b>Technology (數位科技)：</b>使用光照度計 App (Lux Meter) 精準控制光源距離，記錄照度與產氣率之函數關聯。",
+          e: "<b>Engineering (工程設計)：</b>設計一座「智慧垂直水耕植物盒」，配置最適紅藍波長植物生長燈與定時氣動循環。",
+          a: "<b>Arts (藝術美感)：</b>收集落葉製作葉脈書籤拓印，並以紙色層分析法展現葉綠素 a、葉綠素 b 與葉黃素的色彩層次。",
+          la: "<b>Language Arts (語文倡議)：</b>以「一顆水分子在葉綠餅上的奇幻裂解冒險」為題創作 600 字第一人稱科幻冒險文章。"
+        }
+      },
+
+      '2-4': {
+        code: '2-4',
+        title: '動物的消化與吸收',
+        sub: '消化道順序、五大消化腺與消化液、小腸絨毛構造、排遺 vs 排泄',
+        badge: '單元 2-4',
+        themeColor: '#f43f5e',
+        islandPos: { x: 32, y: 0, z: 25 },
+        cameraPos: { x: 32, y: 19, z: 64 },
+        icon: 'fa-solid fa-utensils',
+        notes: `
+          <div class="space-y-4 text-xs sm:text-sm">
+            <div class="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 leading-relaxed">
+              <h4 class="font-bold text-rose-300 text-sm sm:text-base mb-1.5 flex items-center gap-2">
+                <i class="fa-solid fa-route text-rose-400"></i> 焦點一：消化道演化與食物傳送單行道
+              </h4>
+              <p class="text-slate-200">
+                動物獲取養分歷經<b>攝食 ➔ 消化 ➔ 吸收 ➔ 排遺</b>四階段。<br>
+                • <b>囊狀消化腔：</b>單一開口（進出同孔），如水螅、海葵。<br>
+                • <b>管狀消化道：</b>單向通行（兩個開口，口進肛門出），分工精細效率高，如人類、鳥類、蚯蚓。<br>
+                • <b>人體消化管順序：</b>口腔 ➔ 咽 ➔ 食道 ➔ 胃 ➔ 小腸 ➔ 大腸 ➔ 肛門。
+              </p>
+            </div>
+
+            <!-- 五大消化腺與消化液全真對照表 -->
+            <div class="overflow-x-auto rounded-xl border border-white/10 shadow-lg">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-rose-500/20 text-rose-200">
+                  <tr>
+                    <th class="p-2.5">消化腺</th>
+                    <th class="p-2.5">分泌之消化液</th>
+                    <th class="p-2.5">作用場所</th>
+                    <th class="p-2.5">主要酵素與作用對象</th>
+                    <th class="p-2.5">補習班名師考點筆記</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-white/10 bg-slate-900/70 text-slate-300">
+                  <tr>
+                    <td class="p-2.5 font-bold text-amber-300">唾腺</td>
+                    <td class="p-2.5">唾液</td>
+                    <td class="p-2.5">口腔 (中性)</td>
+                    <td class="p-2.5">唾液澱粉酶（澱粉 ➔ 麥芽糖）</td>
+                    <td class="p-2.5">潤滑食物成食團，初步分解澱粉</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-rose-300">胃腺</td>
+                    <td class="p-2.5">胃液 (含鹽酸)</td>
+                    <td class="p-2.5">胃 (強酸 pH 2)</td>
+                    <td class="p-2.5">胃蛋白酶（初步分解蛋白質）</td>
+                    <td class="p-2.5">鹽酸殺菌並提供酸性環境；胃不消化醣與脂</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-emerald-400">肝臟</td>
+                    <td class="p-2.5 font-semibold text-emerald-300">膽汁 (暫存於膽囊)</td>
+                    <td class="p-2.5">小腸 (十二指腸)</td>
+                    <td class="p-2.5 text-rose-400 font-bold">★不含任何酵素！</td>
+                    <td class="p-2.5 text-rose-300 font-semibold">僅物理「乳化脂質」（大油滴變小油滴增加接觸面）</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-cyan-300">胰臟</td>
+                    <td class="p-2.5">胰液 (弱鹼性)</td>
+                    <td class="p-2.5">小腸 (十二指腸)</td>
+                    <td class="p-2.5 text-amber-300 font-bold">胰澱粉酶、胰蛋白酶、胰脂酶</td>
+                    <td class="p-2.5">人體消化酵素<b>最齊全</b>的消化腺！能分解醣、蛋、脂</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2.5 font-bold text-purple-300">腸腺</td>
+                    <td class="p-2.5">腸液 (弱鹼性)</td>
+                    <td class="p-2.5">小腸</td>
+                    <td class="p-2.5">多種消化酵素（分解醣類與蛋白質）</td>
+                    <td class="p-2.5">在小腸完成最終徹底水解</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 小腸絨毛與排遺概念 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10 space-y-1">
+                <div class="font-bold text-amber-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-cubes"></i> 小腸絨毛 (Villi) 吸收分工
+                </div>
+                <p class="text-slate-300 leading-relaxed">
+                  小腸內壁環狀皺褶與無數指狀絨毛，大幅增加<b>吸收表面積</b>。<br>
+                  • <b>微血管：</b>吸收單醣（葡萄糖）、胺基酸、水溶性維生素與水。<br>
+                  • <b>乳糜管 (淋巴管)：</b>吸收脂肪酸、甘油與脂溶性維生素。
+                </p>
+              </div>
+              <div class="p-3.5 rounded-xl bg-slate-800/80 border border-white/10 space-y-1">
+                <div class="font-bold text-rose-400 flex items-center gap-1.5">
+                  <i class="fa-solid fa-toilet"></i> 排遺 (Defecation) vs 排泄
+                </div>
+                <p class="text-slate-300 leading-relaxed">
+                  • <b>排遺：</b>未消化吸收之食物殘渣，經大腸吸收水分後形成糞便由肛門排出。<br>
+                  • <b>排泄：</b>細胞代謝廢物（如尿素經腎臟排出、二氧化碳經肺呼出、汗液經皮膚排出）。
+                </p>
+              </div>
+            </div>
+          </div>
+        `,
+        quiz: [
+          {
+            q: "某病患因膽結石手術切除「膽囊」。醫師建議該病患術後飲食應特別限制何種養分的攝取量，以免造成消化不良甚至脂肪下痢？",
+            options: ["醣類（米飯、麵食）", "脂質（油炸物、高脂肉類）", "蛋白質（魚肉、豆腐）", "維生素 C"],
+            correct: 1,
+            analysis: "【名師破題指引】：膽囊功能為「儲存與濃縮由肝臟製造的膽汁」。膽汁能乳化脂質以利胰脂酶作用。切除膽囊後缺乏暫存濃縮功能，面對高脂餐點無法即時排放大量膽汁，易引起脂質消化不良。故應限制脂質攝取。故選 (B)。"
+          },
+          {
+            q: "下列關於人體各消化液及其特性的敘述，何者「完全正確」？",
+            options: [
+              "膽汁由膽囊製造，含有能分解脂肪的消化酵素",
+              "胃液呈強酸性，鹽酸的主要功能是直接分解脂質",
+              "胰液藉由導管注入小腸中，是體內消化酵素最齊全的消化液",
+              "大腸內壁有無數小腸絨毛，專司吸收蛋白質分解後的胺基酸"
+            ],
+            correct: 2,
+            analysis: "【考點逐一檢視】：\n• (A) 膽汁由「肝臟」製造且「不含任何酵素」。\n• (B) 胃酸殺菌並活化胃蛋白酶，不分解脂質。\n• (D) 大腸無絨毛，主要吸收水分並形成糞便。\n• (C) 胰液由胰臟分泌並注入小腸（十二指腸），含澱粉酶、蛋白酶、脂酶，最為齊全，完全正確。故選 (C)。"
+          },
+          {
+            q: "若阿龍因腸道疾病使得小腸內部的絨毛嚴重萎縮，最可能會發生下列哪一種生理異常現象？",
+            options: [
+              "磨碎食物的機械功能降低",
+              "胃酸分泌量大幅減少",
+              "吸收養分與水分的功能顯著降低",
+              "唾液澱粉酶分泌受阻"
+            ],
+            correct: 2,
+            analysis: "【小腸絨毛功能】：小腸絨毛核心功能為「極大化吸收養分與水分的表面積」。絨毛萎縮將重創營養吸收效率，導致嚴重營養不良。故選 (C)。"
+          },
+          {
+            q: "已知某口服藥劑的膠囊外殼是由脂質製成，必須等到外層脂質被完全分解後，內部的活性成分才會釋出。請問此藥劑最可能在哪一個消化器官中釋出活性成分？",
+            options: ["口腔", "食道", "胃", "小腸"],
+            correct: 3,
+            analysis: "【酵素作用場所】：口腔與胃均不含分解脂質的消化液（膽汁與胰脂酶均在小腸中作用）。因此脂質膠囊必須進入「小腸」後才會被膽汁乳化並被胰脂酶分解釋出內部藥物。故選 (D)。"
+          }
+        ],
+        video: {
+          title: "自然2-4生物會考滿分衝刺：動物消化系統全解析",
+          file: "自然2-4生物會考滿分衝刺：動物消化系統.mp4",
+          altFile: "自然2-4生物會考滿分衝刺：動物消化系統.mp4",
+          duration: "08:50",
+          thumbnailDesc: "3D 內視鏡：食道蠕動、胃部研磨、膽汁胰液會師與小腸絨毛吸收",
+          timestamps: [
+            { time: "00:45", label: "單向管狀消化道 vs 水螅囊狀消化腔演化" },
+            { time: "02:30", label: "胃腺胃酸殺菌與胃蛋白酶酸性催化" },
+            { time: "04:50", label: "肝膽胰會師十二指腸：膽汁乳化與胰液全能分解" },
+            { time: "07:15", label: "小腸絨毛微血管與乳糜管吸收途徑比較" }
+          ]
+        },
+        steala: {
+          s: "<b>Science (科學探究)：</b>探討清潔劑（介面活性劑）在油水混合物中的乳化現象，比擬肝臟膽汁乳化脂質的物理分散原理。",
+          t: "<b>Technology (數位科技)：</b>使用 3D 醫學模型瀏覽器觀察人類消化系統拓撲結構，並標記五大消化腺導管注入位置。",
+          e: "<b>Engineering (工程設計)：</b>利用透析膜管 (Dialysis Tubing) 製作「人工小腸吸收膜模型」，實測澱粉與葡萄糖分子的穿透能力。",
+          a: "<b>Arts (藝術美感)：</b>使用多色環保黏土捏塑出完整的消化管（口至肛門）及附屬消化腺立體解剖微縮展示盤。",
+          la: "<b>Language Arts (語文倡議)：</b>以「一顆漢堡包的消化道漂流記」為題，撰寫一篇 600 字生動擬人的生物科普短文。"
+        }
+      }
+    };
+
+    /* ==========================================================================
+       2. WebGL / Three.js 旗艦效能與微縮黏土架構 (Geometry & Material Pooling)
+       ========================================================================== */
+    let scene, camera, renderer, controls;
+    let islandsGroup, solarSystemGroup, cloudsGroup;
+    let planets = [];
+    let raycaster, mouse;
+    let currentFocusIsland = 'home';
+    let isAutoRotating = true;
+    let solarSpeedFactor = 1.0;
+    let islandPickList = [];
+    let hoveredMesh = null;
+    let explorerChibi;
+    let clock;
+
+    // 相機平滑滑翔目標控制 (Cinematic Camera Smoothing)
+    let cameraTargetPos = null;
+    let lookTargetPos = null;
+
+    // 視窗尺寸
+    const container = document.getElementById('webgl-container');
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    /* --------------------------------------------------------------------------
+       2.1 全域資源緩存池 (Resource Pool Cache) - 杜絕多餘幾何與材質配置
+       -------------------------------------------------------------------------- */
+    const GeoCache = {};
+    const MatCache = {};
+
+    function initResourcePool() {
+      // 常用幾何體緩存
+      GeoCache.hexIslandBase = new THREE.CylinderGeometry(12, 9.8, 5.5, 6);
+      GeoCache.hexIslandTop = new THREE.CylinderGeometry(12.2, 12, 1.2, 6);
+      GeoCache.centerBase = new THREE.CylinderGeometry(13.5, 11, 6.2, 6);
+      GeoCache.centerTop = new THREE.CylinderGeometry(13.8, 13.5, 1.3, 6);
+      GeoCache.hoverRing = new THREE.RingGeometry(13.5, 14.8, 32);
+
+      GeoCache.trunk = new THREE.CylinderGeometry(0.35, 0.5, 1.8, 8);
+      GeoCache.treeCrown = new THREE.DodecahedronGeometry(1.2, 1);
+      GeoCache.shrubCrown = new THREE.SphereGeometry(1.0, 10, 10);
+      GeoCache.mushroomStem = new THREE.CylinderGeometry(0.2, 0.3, 0.8, 8);
+      GeoCache.mushroomCap = new THREE.SphereGeometry(0.65, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+      GeoCache.crystalCone = new THREE.ConeGeometry(0.5, 2.0, 5);
+      GeoCache.testTube = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10);
+      GeoCache.villus = new THREE.CylinderGeometry(0.3, 0.36, 1.8, 8);
+      GeoCache.cloudPuff = new THREE.SphereGeometry(2.0, 8, 8);
+      GeoCache.bridgePlank = new THREE.BoxGeometry(2.5, 0.7, 1);
+    }
+
+    // 黏土微縮漫反射材質工廠 (高粗糙度、零金屬光澤)
+    function getClayMaterial(colorHex, roughness = 0.88, emissive = 0x000000) {
+      const key = `${colorHex}_${roughness}_${emissive}`;
+      if (!MatCache[key]) {
+        MatCache[key] = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          roughness: roughness,
+          metalness: 0.0,
+          emissive: emissive,
+          flatShading: false
+        });
+      }
+      return MatCache[key];
+    }
+
+    /* --------------------------------------------------------------------------
+       2.2 Three.js 核心初始化
+       -------------------------------------------------------------------------- */
+    function initThree() {
+      clock = new THREE.Clock();
+
+      // 1. 場景
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060914);
+      scene.fog = new THREE.FogExp2(0x0a1024, 0.0065); // 營造深空景深光學
+
+      // 2. 相機 (42度微縮微距透視)
+      camera = new THREE.PerspectiveCamera(42, width / height, 0.8, 1400);
+      camera.position.set(0, 48, 85);
+
+      // 3. WebGL 渲染器 (效能極限優化)
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(width, height);
+      // 限制裝置像素比在 1.5 ~ 2 之間，平衡 Retina 高清與 60fps 幀率
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.18;
+      container.appendChild(renderer.domElement);
+
+      // 4. OrbitControls 鏡頭控制器
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2.08; // 仰角限制
+      controls.minDistance = 16;
+      controls.maxDistance = 190;
+      controls.autoRotate = false;
+      controls.target.set(0, 4, 0);
+
+      // 5. 光源架構 (微縮黏土工作室 Key + Fill + Rim 柔光系統)
+      const ambientLight = new THREE.AmbientLight(0xfff6ea, 1.35);
+      scene.add(ambientLight);
+
+      // 主暖太陽光 (Directional Shadow Light)
+      const mainSunLight = new THREE.DirectionalLight(0xfffaed, 1.85);
+      mainSunLight.position.set(50, 80, 45);
+      mainSunLight.castShadow = true;
+      mainSunLight.shadow.mapSize.width = 2048;
+      mainSunLight.shadow.mapSize.height = 2048;
+      mainSunLight.shadow.camera.near = 15;
+      mainSunLight.shadow.camera.far = 230;
+      mainSunLight.shadow.camera.left = -65;
+      mainSunLight.shadow.camera.right = 65;
+      mainSunLight.shadow.camera.top = 65;
+      mainSunLight.shadow.camera.bottom = -65;
+      mainSunLight.shadow.bias = -0.0004;
+      mainSunLight.shadow.normalBias = 0.02;
+      scene.add(mainSunLight);
+
+      // 藍紫色天空弱補光 (提昇底層黏土層次)
+      const skyFillLight = new THREE.DirectionalLight(0x739af0, 0.7);
+      skyFillLight.position.set(-50, 45, -45);
+      scene.add(skyFillLight);
+
+      // 柔和邊緣金黃光 (Rim Light)
+      const rimLight = new THREE.PointLight(0xfcd34d, 1.1, 130);
+      rimLight.position.set(0, 32, -55);
+      scene.add(rimLight);
+
+      // 6. 射線拾取
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      // 7. 建構緩存與微縮場景
+      initResourcePool();
+      createDeepSpaceEnvironment();
+      createSolarSystemPlanets();
+      createArchipelago();
+      createAtmosphericClouds();
+      createExplorerChibi();
+
+      // 8. 事件監聽
+      window.addEventListener('resize', onWindowResize, false);
+      renderer.domElement.addEventListener('pointerdown', onScenePointerDown, false);
+      renderer.domElement.addEventListener('pointermove', onScenePointerMove, false);
+
+      // 支援鍵盤快速鍵切換 (1, 2, 3, 4, 0, ESC)
+      window.addEventListener('keydown', onKeyDown, false);
+    }
+
+    /* --------------------------------------------------------------------------
+       2.3 太陽系 9 大天體巡航背景 (太陽 + 8大行星)
+       -------------------------------------------------------------------------- */
+    function createDeepSpaceEnvironment() {
+      // 隨機閃爍星辰粒子群
+      const starsCount = 2600;
+      const starPositions = new Float32Array(starsCount * 3);
+      const starColors = new Float32Array(starsCount * 3);
+
+      for (let i = 0; i < starsCount * 3; i += 3) {
+        const radius = 300 + Math.random() * 220;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+
+        starPositions[i] = radius * Math.sin(phi) * Math.cos(theta);
+        starPositions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        starPositions[i + 2] = radius * Math.cos(phi);
+
+        // 星光微色溫（藍白、暖黃、粉紫）
+        starColors[i] = 0.82 + Math.random() * 0.18;
+        starColors[i + 1] = 0.85 + Math.random() * 0.15;
+        starColors[i + 2] = 0.95 + Math.random() * 0.05;
+      }
+
+      const starsGeo = new THREE.BufferGeometry();
+      starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+      starsGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+      const starsMat = new THREE.PointsMaterial({
+        size: 1.6,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85
+      });
+      const starField = new THREE.Points(starsGeo, starsMat);
+      scene.add(starField);
+    }
+
+    function createSolarSystemPlanets() {
+      solarSystemGroup = new THREE.Group();
+      scene.add(solarSystemGroup);
+
+      // 太陽中心 (Sun) - 宏偉遠景
+      const sunGeo = new THREE.SphereGeometry(10.5, 32, 32);
+      const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
+      const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+      sunMesh.position.set(0, 68, -240);
+      solarSystemGroup.add(sunMesh);
+
+      // 太陽日冕光輝線框
+      const glowGeo = new THREE.SphereGeometry(13.8, 24, 24);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xff6600,
+        transparent: true,
+        opacity: 0.38,
+        wireframe: true
+      });
+      const sunGlow = new THREE.Mesh(glowGeo, glowMat);
+      sunMesh.add(sunGlow);
+
+      // 行星參數定義 (水、金、地、火、木、土、天王、海王)
+      const planetData = [
+        { name: '水星 Mercury', dist: 78, size: 1.15, color: 0xa3a3a3, speed: 0.024, incl: 0.05 },
+        { name: '金星 Venus', dist: 98, size: 1.7, color: 0xeab308, speed: 0.018, incl: 0.03 },
+        { name: '地球 Earth', dist: 124, size: 2.0, color: 0x3b82f6, speed: 0.013, incl: 0.0, hasMoon: true },
+        { name: '火星 Mars', dist: 150, size: 1.45, color: 0xef4444, speed: 0.010, incl: 0.04 },
+        { name: '木星 Jupiter', dist: 188, size: 5.2, color: 0xd97706, speed: 0.006, incl: 0.02 },
+        { name: '土星 Saturn', dist: 228, size: 4.2, color: 0xfde047, speed: 0.0045, incl: 0.08, hasRing: true },
+        { name: '天王星 Uranus', dist: 265, size: 2.8, color: 0x22d3ee, speed: 0.003, incl: 0.06 },
+        { name: '海王星 Neptune', dist: 298, size: 2.7, color: 0x4f46e5, speed: 0.0022, incl: 0.04 }
+      ];
+
+      planetData.forEach((data) => {
+        // 橢圓公轉軌道線
+        const orbitCurve = new THREE.EllipseCurve(0, 0, data.dist, data.dist * 0.95, 0, 2 * Math.PI, false, 0);
+        const points = orbitCurve.getPoints(128);
+        const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const orbitMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.18 });
+        const orbitLine = new THREE.Line(orbitGeo, orbitMat);
+        orbitLine.rotation.x = Math.PI / 2.3;
+        orbitLine.rotation.y = data.incl;
+        orbitLine.position.set(0, 16, -65);
+        solarSystemGroup.add(orbitLine);
+
+        // 行星球體
+        const pGeo = new THREE.SphereGeometry(data.size, 20, 20);
+        const pMat = getClayMaterial(data.color, 0.75);
+        const planetMesh = new THREE.Mesh(pGeo, pMat);
+
+        // 特殊：土星雙環
+        if (data.hasRing) {
+          const ringGeo = new THREE.RingGeometry(data.size * 1.45, data.size * 2.4, 32);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xeab308,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.65
+          });
+          const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+          ringMesh.rotation.x = Math.PI / 2.4;
+          planetMesh.add(ringMesh);
+        }
+
+        // 地球之月球
+        if (data.hasMoon) {
+          const moonGeo = new THREE.SphereGeometry(data.size * 0.28, 12, 12);
+          const moonMat = getClayMaterial(0xe2e8f0, 0.9);
+          const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+          moonMesh.position.set(data.size * 2.2, 0.4, 0);
+          planetMesh.add(moonMesh);
+        }
+
+        solarSystemGroup.add(planetMesh);
+
+        planets.push({
+          mesh: planetMesh,
+          dist: data.dist,
+          speed: data.speed,
+          incl: data.incl,
+          angle: Math.random() * Math.PI * 2
+        });
+      });
+    }
+
+    /* --------------------------------------------------------------------------
+       2.4 核心教學微縮群島建構 (Archipelago Dioramas)
+       -------------------------------------------------------------------------- */
+    function createArchipelago() {
+      islandsGroup = new THREE.Group();
+      scene.add(islandsGroup);
+
+      // (A) 中央 STELLA 科技核心島
+      createHexIsland({
+        id: 'center',
+        x: 0, y: 3.2, z: 0,
+        isCenter: true,
+        topColor: 0x3b82f6,
+        baseColor: 0x1e293b,
+        title: 'STELLA 核心中樞'
+      });
+      createCenterDioramaDetails();
+
+      // (B) 2-1 養分能量島 (Energy & Nutrients)
+      const island21 = createHexIsland({
+        id: '2-1',
+        x: -32, y: 0, z: -25,
+        topColor: 0xf59e0b,
+        baseColor: 0x78350f,
+        title: '2-1 養分與能量'
+      });
+      createNutrientIslandDetails(island21);
+
+      // (C) 2-2 酵素催化島 (Enzyme Biocatalysts)
+      const island22 = createHexIsland({
+        id: '2-2',
+        x: 32, y: 0, z: -25,
+        topColor: 0x06b6d4,
+        baseColor: 0x0c4a6e,
+        title: '2-2 酵素催化'
+      });
+      createEnzymeIslandDetails(island22);
+
+      // (D) 2-3 光合作用島 (Photosynthesis)
+      const island23 = createHexIsland({
+        id: '2-3',
+        x: -32, y: 0, z: 25,
+        topColor: 0x10b981,
+        baseColor: 0x064e3b,
+        title: '2-3 光合作用'
+      });
+      createPhotosynthesisIslandDetails(island23);
+
+      // (E) 2-4 消化吸收島 (Digestion & Absorption)
+      const island24 = createHexIsland({
+        id: '2-4',
+        x: 32, y: 0, z: 25,
+        topColor: 0xf43f5e,
+        baseColor: 0x881337,
+        title: '2-4 消化與吸收'
+      });
+      createDigestionIslandDetails(island24);
+
+      // (F) 島嶼之間的微縮黏土拱橋
+      createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: -32, y: 0, z: -25 });
+      createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: 32, y: 0, z: -25 });
+      createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: -32, y: 0, z: 25 });
+      createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: 32, y: 0, z: 25 });
+    }
+
+    // 建造六角幾何島嶼底座 (使用 Geometry 緩存池)
+    function createHexIsland({ id, x, y, z, isCenter = false, topColor, baseColor, title }) {
+      const group = new THREE.Group();
+      group.position.set(x, y, z);
+      group.userData = { id, title };
+
+      const baseGeo = isCenter ? GeoCache.centerBase : GeoCache.hexIslandBase;
+      const topGeo = isCenter ? GeoCache.centerTop : GeoCache.hexIslandTop;
+      const h = isCenter ? 6.2 : 5.5;
+
+      // 下層地層基石
+      const baseMesh = new THREE.Mesh(baseGeo, getClayMaterial(baseColor, 0.92));
+      baseMesh.castShadow = true;
+      baseMesh.receiveShadow = true;
+      group.add(baseMesh);
+
+      // 頂部草地/黏土薄層
+      const topMesh = new THREE.Mesh(topGeo, getClayMaterial(topColor, 0.85));
+      topMesh.position.y = h / 2 + 0.45;
+      topMesh.castShadow = true;
+      topMesh.receiveShadow = true;
+      topMesh.userData = { id, title, isClickable: true, parentGroup: group };
+      group.add(topMesh);
+
+      // 島嶼底盤發光光環
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: topColor,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.35
+      });
+      const hoverRing = new THREE.Mesh(GeoCache.hoverRing, ringMat);
+      hoverRing.rotation.x = Math.PI / 2;
+      hoverRing.position.y = -h / 2 - 0.25;
+      group.add(hoverRing);
+
+      // 註冊至點擊碰撞檢測池
+      islandPickList.push(topMesh);
+      islandsGroup.add(group);
+
+      return group;
+    }
+
+    // 黏土拱橋連結
+    function createConnectingBridge(p1, p2) {
+      const distance = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+      const bridgeGroup = new THREE.Group();
+      bridgeGroup.position.set((p1.x + p2.x) / 2, (p1.y + p2.y) / 2 - 0.1, (p1.z + p2.z) / 2);
+
+      const angle = Math.atan2(p2.x - p1.x, p2.z - p1.z);
+      bridgeGroup.rotation.y = angle;
+
+      // 橋面
+      const plankGeo = new THREE.BoxGeometry(2.4, 0.6, distance * 0.72);
+      const plankMesh = new THREE.Mesh(plankGeo, getClayMaterial(0xe2e8f0, 0.9));
+      plankMesh.castShadow = true;
+      plankMesh.receiveShadow = true;
+      bridgeGroup.add(plankMesh);
+
+      // 橋墩
+      for (let i = -1; i <= 1; i += 2) {
+        const pillarGeo = new THREE.CylinderGeometry(0.45, 0.45, 4.2, 8);
+        const pillar = new THREE.Mesh(pillarGeo, getClayMaterial(0x94a3b8, 0.9));
+        pillar.position.set(i * 1.15, -2.1, 0);
+        bridgeGroup.add(pillar);
+      }
+
+      islandsGroup.add(bridgeGroup);
+    }
+
+    // 中央核心科技島微縮景觀：浮空發光八面體與衛星環
+    function createCenterDioramaDetails() {
+      const centerGroup = new THREE.Group();
+      centerGroup.position.set(0, 7.8, 0);
+
+      // 浮空能量晶體
+      const coreGeo = new THREE.OctahedronGeometry(2.8, 0);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0x60a5fa,
+        emissive: 0x2563eb,
+        roughness: 0.35,
+        metalness: 0.15
+      });
+      const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+      coreMesh.name = 'stealaCore';
+      centerGroup.add(coreMesh);
+
+      // 環繞軌道圈
+      const ringGeo = new THREE.TorusGeometry(4.4, 0.2, 12, 48);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x93c5fd });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.rotation.x = Math.PI / 3;
+      ringMesh.name = 'coreOrbitRing';
+      centerGroup.add(ringMesh);
+
+      // 六邊外圍微縮黏土小樹
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const tree = createClayTree(0x38bdf8, 0x1e3a8a);
+        tree.position.set(Math.cos(ang) * 9.2, -3.4, Math.sin(ang) * 9.2);
+        centerGroup.add(tree);
+      }
+
+      islandsGroup.add(centerGroup);
+    }
+
+    // 2-1 養分島微縮景觀：食物熱量測定卡計、糖類分子積木
+    function createNutrientIslandDetails(parentGroup) {
+      const topY = 3.6;
+
+      // 燃燒熱量卡計圓筒
+      const caloGeo = new THREE.CylinderGeometry(1.6, 1.8, 4.0, 16);
+      const calo = new THREE.Mesh(caloGeo, getClayMaterial(0xf59e0b));
+      calo.position.set(0, topY + 2.0, 0);
+      calo.castShadow = true;
+      parentGroup.add(calo);
+
+      // 卡計水銀/數位溫度計
+      const thermGeo = new THREE.CylinderGeometry(0.18, 0.18, 3.2, 8);
+      const therm = new THREE.Mesh(thermGeo, getClayMaterial(0xef4444, 0.5));
+      therm.position.set(0.6, topY + 3.4, 0);
+      parentGroup.add(therm);
+
+      // 燃燒火苗 (小水滴形錐體)
+      const flameGeo = new THREE.ConeGeometry(0.85, 1.8, 8);
+      const flameMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xd97706, roughness: 0.4 });
+      const flame = new THREE.Mesh(flameGeo, flameMat);
+      flame.position.set(0, topY + 4.4, 0);
+      parentGroup.add(flame);
+
+      // 三大產能養分立體積木 (醣類-土司方塊、蛋白質-球體、脂質-角錐)
+      const carbBox = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.7, 1.7), getClayMaterial(0xfde047));
+      carbBox.position.set(-4.2, topY + 0.85, -2.6);
+      carbBox.castShadow = true;
+      parentGroup.add(carbBox);
+
+      const proteinBall = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), getClayMaterial(0xf87171));
+      proteinBall.position.set(-2.8, topY + 1.2, 3.8);
+      proteinBall.castShadow = true;
+      parentGroup.add(proteinBall);
+
+      const lipidPyramid = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.4, 4), getClayMaterial(0xfb923c));
+      lipidPyramid.position.set(4.2, topY + 1.2, -1.8);
+      lipidPyramid.castShadow = true;
+      parentGroup.add(lipidPyramid);
+
+      // 蘑菇與微縮裝飾
+      parentGroup.add(createClayMushroom(-5.2, topY, 1.4, 0xfcd34d));
+      parentGroup.add(createClayMushroom(3.8, topY, 4.2, 0xfde68a));
+    }
+
+    // 2-2 酵素島微縮景觀：鑰匙與鎖孔活性位立體配對模型、三色試管架
+    function createEnzymeIslandDetails(parentGroup) {
+      const topY = 3.6;
+
+      // 巨大酵素基質模型 (圓環凹口)
+      const enzymeBodyGeo = new THREE.TorusGeometry(2.5, 1.15, 16, 32, Math.PI * 1.65);
+      const enzymeBody = new THREE.Mesh(enzymeBodyGeo, getClayMaterial(0x0284c7));
+      enzymeBody.rotation.x = Math.PI / 2;
+      enzymeBody.position.set(0, topY + 2.5, 0);
+      enzymeBody.castShadow = true;
+      parentGroup.add(enzymeBody);
+
+      // 契合受質小球
+      const substrateGeo = new THREE.SphereGeometry(1.25, 16, 16);
+      const substrate = new THREE.Mesh(substrateGeo, getClayMaterial(0x38bdf8));
+      substrate.position.set(1.6, topY + 2.5, 0);
+      substrate.castShadow = true;
+      parentGroup.add(substrate);
+
+      // 試管架 (pH 檢測：胃酸紅、唾液綠、小腸藍)
+      const rack = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 1.3), getClayMaterial(0x64748b));
+      rack.position.set(-3.6, topY + 0.2, 3.2);
+      parentGroup.add(rack);
+
+      const tubeColors = [0xef4444, 0x10b981, 0x3b82f6];
+      for (let i = 0; i < 3; i++) {
+        const tube = new THREE.Mesh(GeoCache.testTube, getClayMaterial(tubeColors[i]));
+        tube.position.set(-4.6 + (i * 1.05), topY + 1.4, 3.2);
+        tube.castShadow = true;
+        parentGroup.add(tube);
+      }
+
+      // 活性藍水晶簇
+      parentGroup.add(createClayCrystalCluster(4.4, topY, -2.6, 0x0ea5e9));
+    }
+
+    // 2-3 光合島微縮景觀：巨型立體翠綠葉片、保衛細胞雙氣孔
+    function createPhotosynthesisIslandDetails(parentGroup) {
+      const topY = 3.6;
+
+      // 巨型翠綠葉片模型
+      const leafShape = new THREE.Shape();
+      leafShape.moveTo(0, 0);
+      leafShape.quadraticCurveTo(2.6, 3.8, 0, 7.4);
+      leafShape.quadraticCurveTo(-2.6, 3.8, 0, 0);
+      const extrudeSettings = { depth: 0.65, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.15, bevelThickness: 0.2 };
+      const leafGeo = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
+      const leafMesh = new THREE.Mesh(leafGeo, getClayMaterial(0x059669));
+      leafMesh.rotation.x = 0.32;
+      leafMesh.rotation.z = -0.22;
+      leafMesh.position.set(0, topY + 0.2, -2.2);
+      leafMesh.castShadow = true;
+      parentGroup.add(leafMesh);
+
+      // 保衛細胞對 (成雙半月圓環)
+      const guardGeo = new THREE.TorusGeometry(1.25, 0.48, 12, 24);
+      const guardCell = new THREE.Mesh(guardGeo, getClayMaterial(0x34d399));
+      guardCell.rotation.x = Math.PI / 2;
+      guardCell.position.set(-4.0, topY + 0.5, 3.4);
+      guardCell.castShadow = true;
+      parentGroup.add(guardCell);
+
+      // 光反應晶瑩小水滴
+      const waterDrop = new THREE.Mesh(new THREE.SphereGeometry(0.85, 14, 14), new THREE.MeshStandardMaterial({
+        color: 0x67e8f9,
+        roughness: 0.18,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.88
+      }));
+      waterDrop.position.set(3.8, topY + 1.5, 2.6);
+      parentGroup.add(waterDrop);
+
+      // 綠意小灌木
+      parentGroup.add(createClayTree(0x10b981, 0x064e3b, 1.25, -4.8, topY, -3.2));
+      parentGroup.add(createClayTree(0x059669, 0x064e3b, 0.95, 4.8, topY, -3.6));
+    }
+
+    // 2-4 消化島微縮景觀：人體粉紅胃工坊、小腸絨毛叢林
+    function createDigestionIslandDetails(parentGroup) {
+      const topY = 3.6;
+
+      // 可愛黏土粉紅「胃 (Stomach)」
+      const stomachGeo = new THREE.TorusGeometry(1.9, 1.15, 16, 24, Math.PI * 1.35);
+      const stomachMesh = new THREE.Mesh(stomachGeo, getClayMaterial(0xf43f5e));
+      stomachMesh.rotation.z = -0.55;
+      stomachMesh.position.set(-2.6, topY + 2.4, -1.6);
+      stomachMesh.castShadow = true;
+      parentGroup.add(stomachMesh);
+
+      // 肝臟與綠色膽囊
+      const liverMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.3, 5), getClayMaterial(0x9f1239));
+      liverMesh.rotation.z = 1.25;
+      liverMesh.position.set(-4.8, topY + 1.5, 2.0);
+      parentGroup.add(liverMesh);
+
+      const gallBladder = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 12), getClayMaterial(0x84cc16));
+      gallBladder.position.set(-3.8, topY + 1.3, 2.4);
+      parentGroup.add(gallBladder);
+
+      // 小腸絨毛叢林 (指狀突起微縮陣列)
+      const villiGroup = new THREE.Group();
+      villiGroup.position.set(3.4, topY, 1.6);
+      for (let i = 0; i < 8; i++) {
+        const vHeight = 1.4 + Math.random() * 0.9;
+        const villus = new THREE.Mesh(GeoCache.villus, getClayMaterial(0xfb7185));
+        villus.scale.set(1, vHeight / 1.8, 1);
+        villus.position.set((Math.random() - 0.5) * 3.2, vHeight / 2, (Math.random() - 0.5) * 3.2);
+        villus.castShadow = true;
+        villiGroup.add(villus);
+      }
+      parentGroup.add(villiGroup);
+    }
+
+    /* --------------------------------------------------------------------------
+       2.5 輔助黏土模型 (樹、蘑菇、水晶、探險家 Chibi 小人)
+       -------------------------------------------------------------------------- */
+    function createClayTree(foliageColor, trunkColor, scale = 1, px = 0, py = 0, pz = 0) {
+      const treeGroup = new THREE.Group();
+      treeGroup.position.set(px, py, pz);
+      treeGroup.scale.set(scale, scale, scale);
+
+      const trunk = new THREE.Mesh(GeoCache.trunk, getClayMaterial(trunkColor, 0.92));
+      trunk.position.y = 0.9;
+      trunk.castShadow = true;
+      treeGroup.add(trunk);
+
+      const foliage = new THREE.Mesh(GeoCache.treeCrown, getClayMaterial(foliageColor, 0.85));
+      foliage.position.y = 2.4;
+      foliage.castShadow = true;
+      treeGroup.add(foliage);
+
+      return treeGroup;
+    }
+
+    function createClayMushroom(px, py, pz, capColor) {
+      const mGroup = new THREE.Group();
+      mGroup.position.set(px, py, pz);
+
+      const stem = new THREE.Mesh(GeoCache.mushroomStem, getClayMaterial(0xf1f5f9, 0.9));
+      stem.position.y = 0.4;
+      mGroup.add(stem);
+
+      const cap = new THREE.Mesh(GeoCache.mushroomCap, getClayMaterial(capColor, 0.85));
+      cap.position.y = 0.8;
+      mGroup.add(cap);
+
+      return mGroup;
+    }
+
+    function createClayCrystalCluster(px, py, pz, color) {
+      const cGroup = new THREE.Group();
+      cGroup.position.set(px, py, pz);
+
+      for (let i = 0; i < 4; i++) {
+        const cMesh = new THREE.Mesh(GeoCache.crystalCone, getClayMaterial(color, 0.5));
+        cMesh.rotation.z = (Math.random() - 0.5) * 0.4;
+        cMesh.rotation.x = (Math.random() - 0.5) * 0.4;
+        cMesh.position.set((i - 1.5) * 0.55, 1.0, (Math.random() - 0.5) * 0.7);
+        cGroup.add(cMesh);
+      }
+      return cGroup;
+    }
+
+    // 巡航探險家 Chibi 小人
+    function createExplorerChibi() {
+      explorerChibi = new THREE.Group();
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16), getClayMaterial(0xffedd5, 0.88));
+      head.position.y = 1.7;
+      explorerChibi.add(head);
+
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.4, 16), getClayMaterial(0xf59e0b, 0.88));
+      hat.position.y = 2.25;
+      explorerChibi.add(hat);
+
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.95, 12), getClayMaterial(0x3b82f6, 0.9));
+      body.position.y = 0.85;
+      explorerChibi.add(body);
+
+      const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.4), getClayMaterial(0xef4444, 0.9));
+      backpack.position.set(0, 0.9, -0.48);
+      explorerChibi.add(backpack);
+
+      explorerChibi.scale.set(1.15, 1.15, 1.15);
+      explorerChibi.position.set(-3.5, 6.4, 4.2);
+      scene.add(explorerChibi);
+    }
+
+    // 漂浮黏土雲朵
+    function createAtmosphericClouds() {
+      cloudsGroup = new THREE.Group();
+      const cloudMat = getClayMaterial(0xffffff, 0.95);
+
+      for (let i = 0; i < 9; i++) {
+        const cloud = new THREE.Group();
+        const numPuffs = 4 + Math.floor(Math.random() * 3);
+        for (let j = 0; j < numPuffs; j++) {
+          const puff = new THREE.Mesh(GeoCache.cloudPuff, cloudMat);
+          puff.scale.setScalar(1 + Math.random() * 0.5);
+          puff.position.set(j * 1.8 - 3, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.5);
+          cloud.add(puff);
+        }
+        const ang = (i / 9) * Math.PI * 2;
+        const rad = 46 + Math.random() * 16;
+        cloud.position.set(Math.cos(ang) * rad, 13 + (Math.random() - 0.5) * 8, Math.sin(ang) * rad);
+        cloudsGroup.add(cloud);
+      }
+      scene.add(cloudsGroup);
+    }
+
+    /* --------------------------------------------------------------------------
+       2.6 動畫主迴圈 (Delta Time 幀率平滑與鏡頭阻尼插值)
+       -------------------------------------------------------------------------- */
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // (A) 行星自轉與公轉 (依賴 delta time，不受 144Hz 衝速影響)
+      planets.forEach((p) => {
+        p.angle += p.speed * 0.4 * solarSpeedFactor * delta * 60;
+        p.mesh.position.x = Math.cos(p.angle) * p.dist;
+        p.mesh.position.z = Math.sin(p.angle) * p.dist * 0.95 - 65;
+        p.mesh.position.y = Math.sin(p.angle) * (p.dist * 0.35) + 16;
+        p.mesh.rotation.y += 0.02 * delta * 60;
+      });
+
+      // (B) 中央核心水晶旋轉浮動
+      const core = scene.getObjectByName('stealaCore');
+      if (core) {
+        core.rotation.y += 0.012 * delta * 60;
+        core.rotation.x += 0.006 * delta * 60;
+        core.position.y = Math.sin(elapsed * 2.2) * 0.65;
+      }
+      const coreRing = scene.getObjectByName('coreOrbitRing');
+      if (coreRing) {
+        coreRing.rotation.z += 0.008 * delta * 60;
+      }
+
+      // (C) 雲層巡遊
+      if (cloudsGroup) {
+        cloudsGroup.rotation.y += 0.0008 * delta * 60;
+      }
+
+      // (D) Chibi 小人呼吸感跳躍
+      if (explorerChibi) {
+        explorerChibi.position.y = 6.4 + Math.sin(elapsed * 4) * 0.18;
+        explorerChibi.rotation.y = Math.sin(elapsed * 2) * 0.35;
+      }
+
+      // (E) 鏡頭平滑指數阻尼插值 (Exponential Smoothing)
+      if (cameraTargetPos) {
+        const factor = 1 - Math.exp(-4.5 * delta);
+        camera.position.lerp(cameraTargetPos, factor);
+        if (camera.position.distanceTo(cameraTargetPos) < 0.15) {
+          cameraTargetPos = null;
+        }
+      }
+      if (lookTargetPos) {
+        const factor = 1 - Math.exp(-4.5 * delta);
+        controls.target.lerp(lookTargetPos, factor);
+        if (controls.target.distanceTo(lookTargetPos) < 0.08) {
+          lookTargetPos = null;
+        }
+      }
+
+      // (F) 自動環繞旋轉控制
+      if (isAutoRotating && !cameraTargetPos && currentFocusIsland === 'home') {
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.65;
+      } else {
+        controls.autoRotate = false;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    /* --------------------------------------------------------------------------
+       2.7 射線拾取與互動控制 (Raycasting & Hover Effect)
+       -------------------------------------------------------------------------- */
+    function onScenePointerMove(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(islandPickList, false);
+
+      if (intersects.length > 0) {
+        container.style.cursor = 'pointer';
+        const hit = intersects[0].object;
+        if (hoveredMesh !== hit) {
+          if (hoveredMesh && hoveredMesh.scale) hoveredMesh.scale.set(1, 1, 1);
+          hoveredMesh = hit;
+          if (hit.userData.id !== 'center') {
+            hit.scale.set(1.03, 1.05, 1.03);
+          }
+        }
+      } else {
+        container.style.cursor = 'grab';
+        if (hoveredMesh && hoveredMesh.scale) {
+          hoveredMesh.scale.set(1, 1, 1);
+          hoveredMesh = null;
+        }
+      }
+    }
+
+    function onScenePointerDown(event) {
+      if (event.button !== 0) return; // 僅回應滑鼠左鍵
+
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(islandPickList, false);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const islandId = hit.userData.id;
+        if (islandId && islandId !== 'center') {
+          SoundFX.playClick();
+          zoomToIsland(islandId);
+        }
+      }
+    }
+
+    function zoomToIsland(islandKey) {
+      currentFocusIsland = islandKey;
+
+      // 更新導航列高亮外觀
+      ['home', '2-1', '2-2', '2-3', '2-4'].forEach((k) => {
+        const btn = document.getElementById(`nav-btn-${k}`);
+        if (!btn) return;
+        if (k === islandKey) {
+          btn.classList.add('bg-white/20', 'text-amber-400');
+          btn.classList.remove('text-slate-300');
+        } else {
+          btn.classList.remove('bg-white/20', 'text-amber-400');
+          btn.classList.add('text-slate-300');
+        }
+      });
+
+      if (islandKey === 'home') {
+        cameraTargetPos = new THREE.Vector3(0, 48, 85);
+        lookTargetPos = new THREE.Vector3(0, 4, 0);
+        closeLessonPanel();
+        return;
+      }
+
+      const info = CHAPTER_DATA[islandKey];
+      if (!info) return;
+
+      // 鏡頭滑翔至該島嶼上方聚焦
+      cameraTargetPos = new THREE.Vector3(info.cameraPos.x, info.cameraPos.y, info.cameraPos.z);
+      lookTargetPos = new THREE.Vector3(info.islandPos.x, info.islandPos.y + 4.2, info.islandPos.z);
+
+      // 移動小探險家前往拜訪
+      if (explorerChibi) {
+        explorerChibi.position.set(info.islandPos.x + 3.6, info.islandPos.y + 4.0, info.islandPos.z + 4.2);
+      }
+
+      // 開啟課程抽屜面板
+      openLessonPanel(islandKey);
+    }
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        closeLessonPanel();
+      } else if (event.key === '0' || event.key === '`') {
+        zoomToIsland('home');
+      } else if (event.key === '1') {
+        zoomToIsland('2-1');
+      } else if (event.key === '2') {
+        zoomToIsland('2-2');
+      } else if (event.key === '3') {
+        zoomToIsland('2-3');
+      } else if (event.key === '4') {
+        zoomToIsland('2-4');
+      }
+    }
+
+    function onWindowResize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    function toggleAutoRotate() {
+      isAutoRotating = !isAutoRotating;
+      const btn = document.getElementById('btn-rotate');
+      btn.classList.toggle('text-amber-400', isAutoRotating);
+      btn.classList.toggle('text-slate-500', !isAutoRotating);
+      SoundFX.playClick();
+    }
+
+    function toggleSolarSpeed() {
+      solarSpeedFactor = (solarSpeedFactor === 1.0) ? 3.0 : 1.0;
+      const btn = document.getElementById('btn-speed');
+      btn.classList.toggle('text-amber-400', solarSpeedFactor > 1.0);
+      btn.classList.toggle('text-cyan-400', solarSpeedFactor === 1.0);
+      SoundFX.playClick();
+    }
+
+    function toggleHelpModal() {
+      const modal = document.getElementById('help-modal');
+      modal.classList.toggle('hidden');
+      SoundFX.playClick();
+    }
+
+    /* ==========================================================================
+       3. 課程面板、分頁與測驗即時核對系統
+       ========================================================================== */
+    let activeLessonId = '2-1';
+    let activeTab = 'notes';
+
+    function openLessonPanel(islandKey) {
+      activeLessonId = islandKey;
+      const panel = document.getElementById('lesson-panel');
+      const data = CHAPTER_DATA[islandKey];
+
+      // 標題資訊
+      document.getElementById('panel-badge').innerText = data.badge;
+      document.getElementById('panel-title').innerText = data.title;
+      document.getElementById('panel-icon').className = data.icon;
+      document.getElementById('panel-icon-wrap').style.backgroundColor = data.themeColor;
+
+      // 頁碼指示器
+      const keys = ['2-1', '2-2', '2-3', '2-4'];
+      const curIdx = keys.indexOf(islandKey) + 1;
+      document.getElementById('panel-page-indicator').innerText = `單元 ${curIdx} / 4`;
+
+      // 載入當前分頁
+      switchTab(activeTab);
+
+      // 滑出抽屜
+      panel.classList.remove('translate-x-full');
+    }
+
+    function closeLessonPanel() {
+      const panel = document.getElementById('lesson-panel');
+      panel.classList.add('translate-x-full');
+    }
+
+    function prevIsland() {
+      const keys = ['2-1', '2-2', '2-3', '2-4'];
+      let idx = keys.indexOf(activeLessonId) - 1;
+      if (idx < 0) idx = keys.length - 1;
+      SoundFX.playClick();
+      zoomToIsland(keys[idx]);
+    }
+
+    function nextIsland() {
+      const keys = ['2-1', '2-2', '2-3', '2-4'];
+      let idx = (keys.indexOf(activeLessonId) + 1) % keys.length;
+      SoundFX.playClick();
+      zoomToIsland(keys[idx]);
+    }
+
+    function switchTab(tabKey) {
+      activeTab = tabKey;
+      SoundFX.playClick();
+      const data = CHAPTER_DATA[activeLessonId];
+      const area = document.getElementById('panel-content-area');
+
+      // 更新 Tab 樣式
+      ['notes', 'quiz', 'video', 'steala'].forEach((t) => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (!btn) return;
+        if (t === tabKey) {
+          btn.className = 'flex-1 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 border-amber-400 glass-tab-active flex items-center justify-center gap-1.5';
+        } else {
+          btn.className = 'flex-1 py-3 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white transition-all border-b-2 border-transparent flex items-center justify-center gap-1.5';
+        }
+      });
+
+      // 渲染分頁內容
+      if (tabKey === 'notes') {
+        area.innerHTML = data.notes;
+      } else if (tabKey === 'quiz') {
+        renderQuizView(data.quiz);
+      } else if (tabKey === 'video') {
+        renderVideoView(data.video);
+      } else if (tabKey === 'steala') {
+        renderStealaView(data.steala);
+      }
+    }
+
+    // 歷屆會考素養題庫渲染
+    function renderQuizView(quizList) {
+      const area = document.getElementById('panel-content-area');
+      let html = `
+        <div class="space-y-4">
+          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 border border-white/10 text-xs flex items-center justify-between">
+            <span class="font-bold text-amber-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-feather-pointed"></i> 歷屆會考經典全真素養試題
+            </span>
+            <span class="text-slate-300 font-mono">共 ${quizList.length} 題 • 點選即時核對</span>
+          </div>
+      `;
+
+      quizList.forEach((qItem, qIdx) => {
+        html += `
+          <div class="p-4 rounded-2xl bg-slate-900/85 border border-white/10 space-y-3" id="quiz-card-${qIdx}">
+            <div class="flex items-start gap-2 text-xs sm:text-sm font-bold text-white leading-relaxed">
+              <span class="px-2 py-0.5 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-400/40 text-xs shrink-0 mt-0.5">第 ${qIdx + 1} 題</span>
+              <span>${qItem.q}</span>
+            </div>
+            <div class="space-y-2 pt-1">
+        `;
+
+        qItem.options.forEach((opt, optIdx) => {
+          const optLabels = ['(A)', '(B)', '(C)', '(D)'];
+          html += `
+            <button onclick="handleOptionSelect(${qIdx}, ${optIdx})" id="opt-btn-${qIdx}-${optIdx}" class="w-full text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 transition-all text-xs text-slate-200 flex items-center justify-between group active:scale-[0.99]">
+              <div class="flex items-center gap-2.5">
+                <span class="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center font-bold text-slate-300 group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors text-[11px]">${optLabels[optIdx]}</span>
+                <span>${opt}</span>
+              </div>
+              <i class="fa-regular fa-circle text-slate-500 text-xs group-hover:text-amber-400"></i>
+            </button>
+          `;
+        });
+
+        html += `
+            </div>
+            <!-- 考題解析破題精要隱藏盒 -->
+            <div id="analysis-box-${qIdx}" class="hidden p-3.5 rounded-xl bg-slate-950/90 border border-amber-500/35 text-xs space-y-1.5 animate-fadeIn">
+              <div class="font-bold text-amber-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-lightbulb"></i> 名師破題破局密笈
+              </div>
+              <div class="text-slate-300 leading-relaxed whitespace-pre-line" id="analysis-text-${qIdx}">${qItem.analysis}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+      area.innerHTML = html;
+    }
+
+    function handleOptionSelect(qIdx, selectedOptIdx) {
+      const quiz = CHAPTER_DATA[activeLessonId].quiz[qIdx];
+      const isCorrect = (selectedOptIdx === quiz.correct);
+
+      // 禁用題目按鈕
+      quiz.options.forEach((_, optIdx) => {
+        const btn = document.getElementById(`opt-btn-${qIdx}-${optIdx}`);
+        btn.disabled = true;
+        btn.classList.add('cursor-not-allowed', 'opacity-90');
+
+        if (optIdx === quiz.correct) {
+          btn.classList.add('bg-emerald-500/30', 'border-emerald-500', 'text-emerald-200');
+          btn.querySelector('i').className = 'fa-solid fa-circle-check text-emerald-400 text-sm';
+        } else if (optIdx === selectedOptIdx && !isCorrect) {
+          btn.classList.add('bg-rose-500/30', 'border-rose-500', 'text-rose-200');
+          btn.querySelector('i').className = 'fa-solid fa-circle-xmark text-rose-400 text-sm';
+        }
+      });
+
+      // 展開詳解
+      const analysisBox = document.getElementById(`analysis-box-${qIdx}`);
+      analysisBox.classList.remove('hidden');
+
+      // 音效與彩花
+      if (isCorrect) {
+        SoundFX.playCorrect();
+        confetti({
+          particleCount: 55,
+          spread: 65,
+          origin: { y: 0.72 }
+        });
+      } else {
+        SoundFX.playWrong();
+      }
+    }
+
+    // 影音課堂分頁渲染
+    function renderVideoView(videoData) {
+      const area = document.getElementById('panel-content-area');
+      let html = `
+        <div class="space-y-4">
+          <!-- 影音播放器模擬視窗 -->
+          <div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-white/20 shadow-2xl flex items-center justify-center group">
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent"></div>
+            
+            <div class="z-10 text-center space-y-2 p-4">
+              <button onclick="playDummyVideo('${videoData.title}')" id="video-play-btn" class="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 text-white flex items-center justify-center text-2xl shadow-xl shadow-amber-500/30 transition-transform transform group-hover:scale-110 active:scale-95 mx-auto">
+                <i class="fa-solid fa-play ml-1"></i>
+              </button>
+              <div class="text-xs text-slate-300 font-semibold tracking-wide drop-shadow">${videoData.thumbnailDesc}</div>
+            </div>
+
+            <!-- 控制底條 -->
+            <div class="absolute bottom-0 inset-x-0 p-3 bg-slate-900/90 backdrop-blur-md flex items-center justify-between text-xs text-slate-300 border-t border-white/10">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                <span class="truncate max-w-[220px] font-medium">${videoData.file}</span>
+              </div>
+              <span class="font-mono text-amber-300 font-bold">${videoData.duration}</span>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="text-base font-bold text-white">${videoData.title}</h3>
+            <p class="text-xs text-slate-400 mt-1">涵蓋補習班名師私房提點、3D 結構模擬動畫與實驗操作必考要點。</p>
+          </div>
+
+          <!-- 精華單元時間標籤跳轉 -->
+          <div class="space-y-2 pt-1">
+            <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-list-timeline"></i> 精華單元時間標籤 (點擊即時跳轉)
+            </span>
+            <div class="space-y-1.5">
+      `;
+
+      videoData.timestamps.forEach((ts) => {
+        html += `
+          <div class="p-2.5 rounded-xl bg-slate-900/70 hover:bg-slate-800 border border-white/10 transition-colors flex items-center justify-between text-xs cursor-pointer group" onclick="playDummyVideo('${ts.label}')">
+            <span class="text-slate-200 group-hover:text-amber-300 transition-colors">${ts.label}</span>
+            <span class="px-2 py-0.5 rounded-md bg-white/10 text-amber-400 font-mono font-bold">${ts.time}</span>
+          </div>
+        `;
+      });
+
+      html += `
+            </div>
+          </div>
+        </div>
+      `;
+      area.innerHTML = html;
+    }
+
+    function playDummyVideo(label) {
+      SoundFX.playCorrect();
+      const btn = document.getElementById('video-play-btn');
+      if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+      }
+      confetti({ particleCount: 25, spread: 40 });
+    }
+
+    // STELLA 跨領域自主探究分頁渲染 (S-T-E-A-LA 五大支柱)
+    function renderStealaView(steala) {
+      const area = document.getElementById('panel-content-area');
+      const pillars = [
+        { label: 'Science 科學探究', icon: 'fa-flask-vial', color: 'from-blue-500/20 to-blue-600/10', border: 'border-blue-500/30', text: steala.s },
+        { label: 'Technology 數位科技', icon: 'fa-microchip', color: 'from-cyan-500/20 to-cyan-600/10', border: 'border-cyan-500/30', text: steala.t },
+        { label: 'Engineering 工程設計', icon: 'fa-gears', color: 'from-amber-500/20 to-amber-600/10', border: 'border-amber-500/30', text: steala.e },
+        { label: 'Arts 藝術美感', icon: 'fa-palette', color: 'from-purple-500/20 to-purple-600/10', border: 'border-purple-500/30', text: steala.a },
+        { label: 'Language Arts 語文倡議', icon: 'fa-book-pen', color: 'from-rose-500/20 to-rose-600/10', border: 'border-rose-500/30', text: steala.la }
+      ];
+
+      let html = `
+        <div class="space-y-3.5">
+          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 border border-white/10 text-xs">
+            <h4 class="font-bold text-white text-sm mb-1 flex items-center gap-2">
+              <i class="fa-solid fa-compass-drafting text-amber-400"></i> STELLA 跨學科自主探究專案任務
+            </h4>
+            <p class="text-slate-300">融合科學 (S)、科技 (T)、工程 (E)、藝術美感 (A) 與語文表達 (LA)，貫徹十二年國教自主學習與探究實作精神。</p>
+          </div>
+      `;
+
+      pillars.forEach((p) => {
+        html += `
+          <div class="p-3.5 rounded-2xl bg-gradient-to-br ${p.color} border ${p.border} space-y-1.5 transition-transform hover:-translate-y-0.5">
+            <div class="text-xs font-bold text-white flex items-center gap-2">
+              <i class="fa-solid ${p.icon} text-amber-400"></i>
+              <span>${p.label}</span>
+            </div>
+            <div class="text-xs text-slate-200 leading-relaxed">${p.text}</div>
+          </div>
+        `;
+      });
+
+      html += `
+        <div class="pt-2 text-center">
+          <button onclick="submitProjectProof()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:brightness-110 text-white font-bold text-xs shadow-lg transition-transform active:scale-95">
+            <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i> 提交本單元 STELLA 學習歷程檔案
+          </button>
+        </div>
+      </div>`;
+
+      area.innerHTML = html;
+    }
+
+    function submitProjectProof() {
+      SoundFX.playCorrect();
+      confetti({ particleCount: 75, spread: 85 });
+      const area = document.getElementById('panel-content-area');
+      const toast = document.createElement('div');
+      toast.className = 'p-3 rounded-xl bg-emerald-500/30 border border-emerald-400 text-emerald-200 text-xs text-center font-bold animate-bounce';
+      toast.innerText = '🎉 STELLA 探究成果檔案已成功驗證並同步至雲端學習歷程！';
+      area.prepend(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // 啟動 3D 渲染
+    window.addEventListener('DOMContentLoaded', () => {
+      initThree();
+      animate();
+    });
+  </script>
+</body>
+</html>
