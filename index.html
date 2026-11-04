@@ -1889,130 +1889,312 @@
     // -------------------------------------------------------------------------
     // 3D Q版擬真黏土手辦人物建構器 (Detailed Miniature Clay Character Builder)
     // -------------------------------------------------------------------------
-    function createClayCharacter(suitColor, hairColor, propType, metaData) {
+    
+    // =========================================================================
+    // 《皮克敏》(Pikmin) 超擬真微縮手辦 3D 引擎系統 (Pikmin Miniature & Diorama Engine)
+    // =========================================================================
+
+    // 1. 皮克敏小精靈生成器 (Miniature Pikmin: 紅、黃、藍、白、發光皮克敏)
+    function createMiniPikmin(type, stage, scale = 1.0) {
+      const pGroup = new THREE.Group();
+      pGroup.scale.setScalar(scale);
+
+      // 皮克敏品種配色與特殊特徵
+      const pikminConfigs = {
+        red: { color: 0xef4444, spec: 'nose' },      // 紅色皮克敏：尖鼻子、耐火
+        yellow: { color: 0xeab308, spec: 'ears' },   // 黃色皮克敏：大精靈耳朵、耐電
+        blue: { color: 0x3b82f6, spec: 'mouth' },    // 藍色皮克敏：粉紅嘴鰓、水棲
+        white: { color: 0xf8fafc, spec: 'eyes' },    // 白色皮克敏：小巧、紅寶石毒眼
+        glow: { color: 0x86efac, spec: 'glow' }      // 發光夜間皮克敏：薄荷綠螢光
+      };
+      const cfg = pikminConfigs[type] || pikminConfigs.red;
+
+      const pMat = getClayMat(cfg.color, 0.42, 0.08, cfg.spec === 'glow' ? 0x22c55e : 0x000000, cfg.spec === 'glow' ? 0.45 : 0);
+
+      // (1) 纖細圓潤水滴身軀
+      const pBody = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.11, 0.62, 12), pMat);
+      pBody.position.y = 0.52;
+      pBody.castShadow = true;
+      pGroup.add(pBody);
+
+      // (2) 圓潤頭部
+      const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), pMat);
+      pHead.position.y = 0.98;
+      pHead.castShadow = true;
+      pGroup.add(pHead);
+
+      // (3) 皮克敏大眼眸（黑曜石大眼珠 + 晶瑩白高光點）
+      const eyeMat = getClayMat(cfg.spec === 'eyes' ? 0xdc2626 : 0x0a0f1d, 0.15, 0.1);
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), eyeMat);
+      eyeL.position.set(-0.11, 1.02, 0.28);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), eyeMat);
+      eyeR.position.set(0.11, 1.02, 0.28);
+
+      // 眼睛白色高光反射點 (Specular Catchlight)
+      const catchMat = getClayMat(0xffffff, 0.1, 0.05);
+      const cL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), catchMat);
+      cL.position.set(-0.09, 1.05, 0.35);
+      const cR = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), catchMat);
+      cR.position.set(0.13, 1.05, 0.35);
+      pGroup.add(eyeL, eyeR, cL, cR);
+
+      // (4) 特殊部位造型
+      if (cfg.spec === 'nose') {
+        // 紅皮克敏：經典往前凸出的尖鼻子
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.38, 10), pMat);
+        nose.rotation.x = Math.PI / 2;
+        nose.position.set(0, 0.98, 0.44);
+        pGroup.add(nose);
+      } else if (cfg.spec === 'ears') {
+        // 黃皮克敏：左右招風精靈大尖耳
+        const earL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.36, 8), pMat);
+        earL.rotation.z = Math.PI / 2.3;
+        earL.position.set(-0.35, 1.02, 0);
+        const earR = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.36, 8), pMat);
+        earR.rotation.z = -Math.PI / 2.3;
+        earR.position.set(0.35, 1.02, 0);
+        pGroup.add(earL, earR);
+      } else if (cfg.spec === 'mouth') {
+        // 藍皮克敏：圓形粉紅嘴鰓
+        const gill = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.028, 8, 16), getClayMat(0xf472b6, 0.4, 0.05));
+        gill.position.set(0, 0.92, 0.3);
+        pGroup.add(gill);
+      }
+
+      // (5) 頭頂翠綠生命嫩莖 (Curved Plant Stem)
+      const stemMat = getClayMat(0x16a34a, 0.45, 0.05);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.65, 8), stemMat);
+      stem.position.set(0, 1.45, -0.06);
+      stem.rotation.x = -0.22;
+      pGroup.add(stem);
+
+      // (6) 莖頂發育階層（葉片、花苞、綻放花朵）
+      const headAcc = new THREE.Group();
+      headAcc.position.set(0, 1.74, -0.15);
+
+      if (stage === 'flower') {
+        // 5 瓣潔白花朵 + 鵝黃花蕊
+        const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), getClayMat(0xfbbf24, 0.3, 0.1));
+        headAcc.add(pistil);
+        const petalMat = getClayMat(0xffffff, 0.35, 0.05);
+        for (let p = 0; p < 5; p++) {
+          const pAng = (p / 5) * Math.PI * 2;
+          const petal = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), petalMat);
+          petal.scale.set(1.4, 0.25, 0.9);
+          petal.position.set(Math.cos(pAng) * 0.14, 0.02, Math.sin(pAng) * 0.14);
+          petal.rotation.y = -pAng;
+          headAcc.add(petal);
+        }
+      } else if (stage === 'bud') {
+        // 嬌嫩粉紅花苞
+        const bud = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 8), getClayMat(0xf472b6, 0.4, 0.05));
+        bud.rotation.x = 0.2;
+        headAcc.add(bud);
+      } else {
+        // 經典翠綠橢圓葉片
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), stemMat);
+        leaf.scale.set(1.5, 0.12, 0.85);
+        leaf.rotation.x = 0.38;
+        leaf.rotation.z = -0.25;
+        headAcc.add(leaf);
+      }
+      pGroup.add(headAcc);
+
+      // (7) 纖巧小手手與小腳腳
+      const limbMat = pMat;
+      const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.32, 6), limbMat);
+      leftArm.position.set(-0.2, 0.58, 0);
+      leftArm.rotation.z = 0.4;
+      const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.32, 6), limbMat);
+      rightArm.position.set(0.2, 0.58, 0);
+      rightArm.rotation.z = -0.4;
+
+      const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.28, 6), limbMat);
+      leftLeg.position.set(-0.1, 0.14, 0);
+      const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.28, 6), limbMat);
+      rightLeg.position.set(0.1, 0.14, 0);
+      pGroup.add(leftArm, rightArm, leftLeg, rightLeg);
+
+      return { pGroup, stem, headAcc, leftArm, rightArm, leftLeg, rightLeg };
+    }
+
+    // 2. 皮克敏隊長／探險家導師生成器（歐利瑪/路易風格：透明泡泡玻璃頭盔、發光天線信號燈、胖嘟嘟探險服、維生背包）
+    function createPikminCaptain(suitColor, beaconColor, propType, metaData) {
       const charGroup = new THREE.Group();
 
-      // 1. 頭部、生動五官、微腮紅與髮型
-      const head = new THREE.Mesh(GeoCache.charHead, getClayMat(0xffedd5, 0.45, 0.05));
-      head.position.y = 2.05;
+      // (1) 圓潤黏土膚色臉蛋
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.68, 20, 20), getClayMat(0xffedd5, 0.42, 0.05));
+      head.position.y = 1.95;
       head.castShadow = true;
       charGroup.add(head);
 
-      // 蓬鬆立體分件髮型
-      const hair = new THREE.Mesh(
-        new THREE.SphereGeometry(0.74, 18, 18, 0, Math.PI * 2, 0, Math.PI * 0.58),
-        getClayMat(hairColor, 0.55, 0.05)
-      );
-      hair.position.y = 2.14;
-      // 額前呆毛髮束
-      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 8), getClayMat(hairColor, 0.55, 0.05));
-      tuft.position.set(0, 2.82, 0.35);
-      tuft.rotation.x = 0.35;
-      charGroup.add(hair, tuft);
+      // 經典歐利瑪可愛大圓球粉紅鼻子 (Olimar Round Nose)
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), getClayMat(0xfb7185, 0.38, 0.05));
+      nose.position.set(0, 1.95, 0.65);
+      charGroup.add(nose);
 
-      // 晶亮黑曜石眼眸與高光
-      const eyeMat = getClayMat(0x0f172a, 0.2, 0.1);
-      const leftEye = new THREE.Mesh(GeoCache.charEye, eyeMat);
-      leftEye.position.set(-0.24, 2.08, 0.62);
-      const rightEye = new THREE.Mesh(GeoCache.charEye, eyeMat);
-      rightEye.position.set(0.24, 2.08, 0.62);
-      // 少女感粉嫩腮紅
+      // 晶亮大黑曜石雙眼 (Big Curious Eyes)
+      const eyeMat = getClayMat(0x0f172a, 0.15, 0.1);
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), eyeMat);
+      eyeL.position.set(-0.24, 2.12, 0.58);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), eyeMat);
+      eyeR.position.set(0.24, 2.12, 0.58);
+
+      // 眼睛白色高光反光 (Catchlights)
+      const catchMat = getClayMat(0xffffff, 0.1, 0.05);
+      const cL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), catchMat);
+      cL.position.set(-0.21, 2.16, 0.67);
+      const cR = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), catchMat);
+      cR.position.set(0.27, 2.16, 0.67);
+
+      // 可愛雙頰腮紅
       const blushMat = getClayMat(0xf472b6, 0.5, 0.05);
-      const leftBlush = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 10), blushMat);
-      leftBlush.rotation.x = Math.PI / 2;
-      leftBlush.position.set(-0.38, 1.95, 0.58);
-      const rightBlush = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 10), blushMat);
-      rightBlush.rotation.x = Math.PI / 2;
-      rightBlush.position.set(0.38, 1.95, 0.58);
-      charGroup.add(leftEye, rightEye, leftBlush, rightBlush);
+      const bL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 10), blushMat);
+      bL.rotation.x = Math.PI / 2;
+      bL.position.set(-0.38, 1.88, 0.56);
+      const bR = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.02, 10), blushMat);
+      bR.rotation.x = Math.PI / 2;
+      bR.position.set(0.38, 1.88, 0.56);
+      charGroup.add(eyeL, eyeR, cL, cR, bL, bR);
 
-      // 科學家專屬圓框護目鏡 (Goggles with Glass Lenses)
-      const goggleMat = getClayMat(0x38bdf8, 0.25, 0.5);
-      const gL = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.038, 10, 20), goggleMat);
-      gL.position.set(-0.24, 2.08, 0.65);
-      const gR = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.038, 10, 20), goggleMat);
-      gR.position.set(0.24, 2.08, 0.65);
-      const gBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.16, 6), goggleMat);
-      gBridge.rotation.z = Math.PI / 2;
-      gBridge.position.set(0, 2.08, 0.66);
-      charGroup.add(gL, gR, gBridge);
+      // 頭盔內翹翹呆毛
+      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.38, 8), getClayMat(0x475569, 0.55, 0.05));
+      tuft.position.set(0, 2.65, 0.12);
+      tuft.rotation.x = 0.28;
+      charGroup.add(tuft);
 
-      // 2. 身體與專業白實驗袍（雙層層次：內搭襯衫 + 白色實驗長袍）
-      const labCoatMat = getClayMat(0xf8fafc, 0.38, 0.05); // 潔白實驗袍
-      const body = new THREE.Mesh(GeoCache.charBody, labCoatMat);
-      body.position.y = 1.05;
+      // (2) 《皮克敏》招牌：高透光太空泡泡玻璃面罩 (Pikmin Glass Bubble Helmet)
+      const helmetGlass = new THREE.Mesh(
+        new THREE.SphereGeometry(0.95, 24, 24),
+        getGlassMat(0xf0fdf4, 0.2)
+      );
+      helmetGlass.position.y = 2.05;
+      helmetGlass.castShadow = true;
+      charGroup.add(helmetGlass);
+
+      // 頭盔金屬鎖固頸圈 (Metal Collar Ring)
+      const collarMat = getClayMat(0x94a3b8, 0.22, 0.85); // 擬真金屬
+      const neckCollar = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.09, 10, 28), collarMat);
+      neckCollar.rotation.x = Math.PI / 2;
+      neckCollar.position.y = 1.25;
+      charGroup.add(neckCollar);
+
+      // (3) 頭盔頂端彈性金屬天線 + 呼吸閃爍信號燈 (Helmet Antenna & Beacon)
+      const antennaStem = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.035, 0.72, 8), collarMat);
+      antennaStem.position.set(0, 3.25, 0.1);
+      antennaStem.rotation.x = 0.22;
+      const beaconMat = getClayMat(beaconColor, 0.1, 0.05, beaconColor, 0.95); // 強烈脈衝自發光
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), beaconMat);
+      beacon.position.set(0, 3.65, 0.2);
+      charGroup.add(antennaStem, beacon);
+
+      // (4) 圓滾滾白厚探險太空服 (Chubby Space Suit Body)
+      const suitMat = getClayMat(0xf8fafc, 0.35, 0.05); // 潔白厚實太空面料
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, 1.15, 18), suitMat);
+      body.position.y = 0.85;
       body.castShadow = true;
-      // 實驗袍翻領 (Collar)
-      const collarL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.38, 0.05), getClayMat(suitColor, 0.4, 0.05));
-      collarL.position.set(-0.16, 1.48, 0.38);
-      collarL.rotation.z = -0.3;
-      const collarR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.38, 0.05), getClayMat(suitColor, 0.4, 0.05));
-      collarR.position.set(0.16, 1.48, 0.38);
-      collarR.rotation.z = 0.3;
-      // 領帶/識別證
-      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.45, 0.04), getClayMat(suitColor, 0.3, 0.1));
-      tie.position.set(0, 1.32, 0.4);
-      // 口袋
-      const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.04), getClayMat(0xe2e8f0, 0.4, 0.05));
-      pocket.position.set(0.26, 0.95, 0.36);
-      charGroup.add(body, collarL, collarR, tie, pocket);
 
-      // 手臂（白袍袖管 + 膚色小手）
-      const leftArm = new THREE.Mesh(GeoCache.charLimb, labCoatMat);
-      leftArm.position.set(-0.7, 1.15, 0);
-      leftArm.rotation.z = 0.35;
-      const rightArm = new THREE.Mesh(GeoCache.charLimb, labCoatMat);
-      rightArm.position.set(0.7, 1.15, 0.2);
+      // 肩膀與胸前學科識別彩帶
+      const epauletL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), getClayMat(suitColor, 0.3, 0.1));
+      epauletL.position.set(-0.65, 1.15, 0);
+      const epauletR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), getClayMat(suitColor, 0.3, 0.1));
+      epauletR.position.set(0.65, 1.15, 0);
+
+      // 胸口微型維生控制盒 (Chest Life-Support Box with Status LEDs)
+      const chestBox = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.3, 0.12), getClayMat(0x1e293b, 0.4, 0.2));
+      chestBox.position.set(0, 0.95, 0.62);
+      const ledGreen = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), getClayMat(0x22c55e, 0.2, 0.1, 0x22c55e, 0.9));
+      ledGreen.position.set(-0.08, 0.95, 0.69);
+      const ledRed = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), getClayMat(0xef4444, 0.2, 0.1, 0xef4444, 0.9));
+      ledRed.position.set(0.08, 0.95, 0.69);
+
+      // 厚實腰帶與金屬帶扣
+      const belt = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.07, 8, 24), getClayMat(0x0f172a, 0.4, 0.1));
+      belt.rotation.x = Math.PI / 2;
+      belt.position.y = 0.48;
+      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.08), getClayMat(0xfbbf24, 0.25, 0.8));
+      buckle.position.set(0, 0.48, 0.74);
+
+      // (5) 背後雙管維生探險背包 (Dual-Canister Oxygen / Nectar Backpack)
+      const packL = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 12), collarMat);
+      packL.position.set(-0.24, 0.95, -0.68);
+      const packR = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 12), collarMat);
+      packR.position.set(0.24, 0.95, -0.68);
+      const packCapL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), getClayMat(0xf59e0b, 0.3, 0.7));
+      packCapL.position.set(-0.24, 1.38, -0.68);
+      const packCapR = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), getClayMat(0xf59e0b, 0.3, 0.7));
+      packCapR.position.set(0.24, 1.38, -0.68);
+      charGroup.add(body, epauletL, epauletR, chestBox, ledGreen, ledRed, belt, buckle, packL, packR, packCapL, packCapR);
+
+      // (6) 太空厚手套手臂
+      const gloveMat = suitMat;
+      const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.68, 10), gloveMat);
+      leftArm.position.set(-0.75, 0.95, 0);
+      leftArm.rotation.z = 0.42;
+      const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.68, 10), gloveMat);
+      rightArm.position.set(0.75, 0.95, 0.2);
       rightArm.rotation.x = -0.6;
       charGroup.add(leftArm, rightArm);
 
-      // 手持精緻教學道具
+      // (7) 手持學科探險道具
       if (propType === 'magnifier') {
-        const magRing = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 12, 24), getClayMat(0xfbbf24, 0.25, 0.7)); // 金框
-        magRing.position.set(0.88, 1.48, 0.58);
-        const magLens = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.02, 16), getGlassMat(0x38bdf8, 0.35)); // 透光鏡片
+        // 2-1 金色大放大鏡 + 真正透光玻璃鏡片
+        const magRing = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.065, 12, 28), getClayMat(0xfbbf24, 0.25, 0.85));
+        magRing.position.set(0.95, 1.35, 0.62);
+        const magLens = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 18), getGlassMat(0x38bdf8, 0.3));
         magLens.rotation.x = Math.PI / 2;
-        magLens.position.set(0.88, 1.48, 0.58);
-        const magHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.45, 10), getClayMat(0x78350f, 0.6, 0.1)); // 木柄
-        magHandle.position.set(0.76, 1.25, 0.58);
+        magLens.position.set(0.95, 1.35, 0.62);
+        const magHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.5, 10), getClayMat(0x78350f, 0.6, 0.1));
+        magHandle.position.set(0.82, 1.1, 0.62);
         magHandle.rotation.z = 0.6;
         charGroup.add(magRing, magLens, magHandle);
       } else if (propType === 'key') {
-        const keyBar = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 10), getClayMat(0x22d3ee, 0.3, 0.4, 0x06b6d4, 0.2));
-        keyBar.position.set(0.85, 1.5, 0.55);
-        keyBar.rotation.z = 0.4;
-        charGroup.add(keyBar);
+        // 2-2 催化晶體滴管鑰匙 (Glowing Crystal Key Pipette)
+        const keyStem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.95, 10), getClayMat(0x22d3ee, 0.2, 0.5, 0x06b6d4, 0.5));
+        keyStem.position.set(0.92, 1.45, 0.6);
+        keyStem.rotation.z = 0.4;
+        const keyGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), getClayMat(0xa855f7, 0.2, 0.2, 0x9333ea, 0.8));
+        keyGem.position.set(1.15, 1.82, 0.6);
+        charGroup.add(keyStem, keyGem);
       } else if (propType === 'watering') {
-        const pot = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), getClayMat(0x38bdf8, 0.4, 0.1));
-        pot.position.set(0.85, 1.35, 0.55);
-        charGroup.add(pot);
+        // 2-3 銅製微型澆水器 + 懸浮水滴晶球
+        const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.42, 12), getClayMat(0xf59e0b, 0.35, 0.7));
+        pot.position.set(0.92, 1.3, 0.6);
+        const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.45, 8), getClayMat(0xf59e0b, 0.35, 0.7));
+        spout.position.set(1.12, 1.42, 0.6);
+        spout.rotation.z = -0.7;
+        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), getGlassMat(0x38bdf8, 0.5));
+        drop.position.set(1.35, 1.25, 0.6);
+        charGroup.add(pot, spout, drop);
       } else if (propType === 'torch') {
-        const torch = new THREE.Mesh(GeoCache.sphereLow, getClayMat(0xf43f5e, 0.2, 0.1, 0xf43f5e, 0.6));
-        torch.scale.setScalar(0.26);
-        torch.position.set(0.85, 1.55, 0.55);
-        charGroup.add(torch);
+        // 2-4 探險金屬火把／微縮光錐手電筒
+        const torchBody = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.55, 10), collarMat);
+        torchBody.position.set(0.92, 1.35, 0.6);
+        torchBody.rotation.x = 0.6;
+        const torchHead = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), getClayMat(0xf43f5e, 0.15, 0.1, 0xf43f5e, 0.9));
+        torchHead.position.set(0.92, 1.58, 0.8);
+        charGroup.add(torchBody, torchHead);
       }
 
-      // 腳部（西裝褲 + 紳士黑皮鞋）
-      const legMat = getClayMat(0x1e293b, 0.6, 0.1);
-      const leftLeg = new THREE.Mesh(GeoCache.charLimb, legMat);
-      leftLeg.position.set(-0.25, 0.35, 0);
-      const rightLeg = new THREE.Mesh(GeoCache.charLimb, legMat);
-      rightLeg.position.set(0.25, 0.35, 0);
-      const shoeMat = getClayMat(0x0f172a, 0.3, 0.2);
-      const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.34), shoeMat);
-      leftShoe.position.set(-0.25, 0.07, 0.06);
-      const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.34), shoeMat);
-      rightShoe.position.set(0.25, 0.07, 0.06);
-      charGroup.add(leftLeg, rightLeg, leftShoe, rightShoe);
+      // (8) 敦厚太空靴腿腳
+      const legMat = suitMat;
+      const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.45, 10), legMat);
+      leftLeg.position.set(-0.28, 0.24, 0);
+      const rightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.45, 10), legMat);
+      rightLeg.position.set(0.28, 0.24, 0);
+      const bootMat = getClayMat(0x0f172a, 0.3, 0.2); // 黑金防滑厚底靴
+      const leftBoot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.46), bootMat);
+      leftBoot.position.set(-0.28, 0.08, 0.08);
+      const rightBoot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.46), bootMat);
+      rightBoot.position.set(0.28, 0.08, 0.08);
+      charGroup.add(leftLeg, rightLeg, leftBoot, rightBoot);
 
-      // 頭頂互動光球
-      const marker = new THREE.Mesh(GeoCache.sphereLow, getClayMat(0x38bdf8, 0.2, 0.1, 0x0ea5e9, 0.5));
-      marker.scale.setScalar(0.26);
-      marker.position.y = 3.25;
+      // (9) 懸浮引路導覽晶球
+      const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), getClayMat(beaconColor, 0.2, 0.1, beaconColor, 0.75));
+      marker.position.y = 4.15;
       charGroup.add(marker);
 
-      // 綁定互動點擊資料
+      // 綁定點擊穿透資料
       charGroup.traverse(c => {
         if (c.isMesh) {
           c.userData = metaData;
@@ -2020,11 +2202,11 @@
         }
       });
 
-      return { charGroup, leftArm, rightArm, leftLeg, rightLeg, marker };
+      return { charGroup, leftArm, rightArm, leftLeg, rightLeg, beacon, marker };
     }
 
     // -------------------------------------------------------------------------
-    // 四座章節主題微縮浮空島 (2-1, 2-2, 2-3, 2-4) + 動態人物與生物
+    // 3. 四大主題微縮教學島建立 (Pikmin 4 終極高質感地標、物件、生物手辦)
     // -------------------------------------------------------------------------
     function buildFourMiniatureIslands() {
       const units = Object.values(CHAPTER_DATA);
@@ -2033,10 +2215,10 @@
         const group = new THREE.Group();
         group.position.set(unit.islandPos.x, unit.islandPos.y, unit.islandPos.z);
 
-        // 1. 黏土島盤頂層（2-1寶石藍、2-2翡翠青、2-3森林綠、2-4珊瑚紅，完全無黃色底盤）
+        // (1) 黏土島盤頂層（清爽深色基調，完全杜絕整面刺眼大黃底）
         const topMesh = new THREE.Mesh(
           GeoCache.cylIslandTop,
-          getClayMat(unit.themeColor, 0.45, 0.06)
+          getClayMat(unit.themeColor, 0.42, 0.06)
         );
         topMesh.position.y = 1.0;
         topMesh.castShadow = true;
@@ -2051,10 +2233,10 @@
         group.add(topMesh);
         islandMeshes.push(topMesh);
 
-        // 2. 島嶼岩石底座
+        // (2) 島嶼地質岩盤底座
         const rockMesh = new THREE.Mesh(
           GeoCache.cylIslandRock,
-          getClayMat(0x1e293b, 0.72, 0.05)
+          getClayMat(0x1e293b, 0.75, 0.05)
         );
         rockMesh.position.y = -2.8;
         rockMesh.castShadow = true;
@@ -2062,7 +2244,7 @@
         group.add(rockMesh);
         islandMeshes.push(rockMesh);
 
-        // 3. 島嶼外圍發光光環
+        // (3) 島嶼外圍微縮能量光環
         const glowRing = new THREE.Mesh(
           GeoCache.torusRing,
           getClayMat(unit.themeColor, 0.25, 0.2, unit.themeColor, 0.35)
@@ -2071,7 +2253,7 @@
         glowRing.position.y = 1.6;
         group.add(glowRing);
 
-        // 註冊島嶼主圖塊（內建「📖重點 / 🎓評量 / 🎬影音」三顆直達按鈕）
+        // 註冊島嶼主圖塊標籤（內建 📖重點 / 🎓評量 / 🎬影音 三大直達鈕）
         const borderColors = {
           '2-1': 'border-blue-400',
           '2-2': 'border-cyan-400',
@@ -2086,20 +2268,22 @@
           borderColors[unit.code]
         );
 
-        // 4. 各島專屬微縮模型地標 + 動態人物 + 動態生物
+        // ---------------------------------------------------------------------
+        // 【島嶼 2-1】：食物中的養分與能量 (Pikmin 巨型寶物、卡計、試管架、皮克敏搬運隊伍)
+        // ---------------------------------------------------------------------
         if (unit.code === '2-1') {
-          // 【2-1 擬真實驗微縮地標】：花生燃燒熱量測定卡計裝置 (Metallic Calorimeter Setup)
+          // (A) 核心實驗裝置：花生燃燒水溫測定金屬卡計 (Metallic Calorimeter Setup)
           const calGroup = new THREE.Group();
-          calGroup.position.set(-2.5, 2.1, -1.5);
+          calGroup.position.set(-2.8, 2.1, -1.6);
 
-          // 1. 隔熱陶瓷底座圓盤
+          // 隔熱陶瓷底座
           const basePlate = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.35, 24), getClayMat(0x334155, 0.6, 0.1));
           basePlate.position.y = 0.18;
           basePlate.receiveShadow = true;
           calGroup.add(basePlate);
 
-          // 2. 金屬三腳架 (3條金屬斜支腳 + 上方金屬圓環)
-          const tripodMat = getClayMat(0x64748b, 0.25, 0.85); // 擬真金屬質感
+          // 鑄鐵三腳架 (3 支金屬腳 + 上方環網)
+          const tripodMat = getClayMat(0x64748b, 0.22, 0.88);
           for (let t = 0; t < 3; t++) {
             const ang = (t / 3) * Math.PI * 2;
             const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.4, 12), tripodMat);
@@ -2111,30 +2295,23 @@
           const topRing = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.1, 12, 32), tripodMat);
           topRing.rotation.x = Math.PI / 2;
           topRing.position.y = 3.35;
-          calGroup.add(topRing);
-
-          // 3. 陶瓷石綿心網 (Wire Gauze)
           const gauze = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.08, 24), getClayMat(0x94a3b8, 0.8, 0.1));
           gauze.position.y = 3.42;
-          calGroup.add(gauze);
+          calGroup.add(topRing, gauze);
 
-          // 4. 透明耐熱玻璃錐形瓶 (Erlenmeyer Flask with Clear Liquid)
+          // 透明耐熱玻璃錐形瓶 + 水位
           const flaskBody = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.25, 2.0, 24), getGlassMat(0xe0f2fe, 0.45));
           flaskBody.position.y = 4.45;
-          flaskBody.castShadow = true;
           const flaskNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.2, 20), getGlassMat(0xe0f2fe, 0.45));
           flaskNeck.position.y = 5.75;
           const flaskLip = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.06, 8, 24), getGlassMat(0xffffff, 0.6));
           flaskLip.rotation.x = Math.PI / 2;
           flaskLip.position.y = 6.35;
-          calGroup.add(flaskBody, flaskNeck, flaskLip);
-
-          // 瓶內被加熱的清水 (Water with slight aqua glow)
-          const waterMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 1.15, 1.4, 20), getClayMat(0x38bdf8, 0.15, 0.05, 0x0284c7, 0.2));
+          const waterMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 1.15, 1.4, 20), getClayMat(0x38bdf8, 0.15, 0.05, 0x0284c7, 0.25));
           waterMesh.position.y = 4.2;
-          calGroup.add(waterMesh);
+          calGroup.add(flaskBody, flaskNeck, flaskLip, waterMesh);
 
-          // 5. 玻璃溫度計 (Glass Thermometer with red alcohol column)
+          // 溫度計
           const thermStem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 10), getGlassMat(0xffffff, 0.7));
           thermStem.position.set(0.12, 5.6, 0.1);
           thermStem.rotation.z = -0.08;
@@ -2143,35 +2320,32 @@
           thermRed.rotation.z = -0.08;
           calGroup.add(thermStem, thermRed);
 
-          // 6. 燃燒針座與燃燒花生 (Burning Peanut with Flickering Flame)
+          // 燃燒針與燃燒花生 + 跳動火焰
           const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.08, 1.1, 8), tripodMat);
           needle.position.y = 0.8;
           const peanutF = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 14), getClayMat(0xd97706, 0.65, 0.05));
           peanutF.scale.set(0.85, 1.25, 0.85);
           peanutF.position.y = 1.35;
-          peanutF.rotation.z = 0.25;
-          const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), getClayMat(0xfbbf24, 0.2, 0.1, 0xf59e0b, 0.85));
-          flame.position.set(0, 1.75, 0);
-          calGroup.add(needle, peanutF, flame);
+          const calFlame = new THREE.Mesh(new THREE.OctahedronGeometry(0.38, 0), getClayMat(0xfbbf24, 0.15, 0.1, 0xf59e0b, 0.9));
+          calFlame.position.set(0, 1.78, 0);
+          calGroup.add(needle, peanutF, calFlame);
 
           const calMeta = {
             unitCode: '2-1',
             targetTab: 'lab',
             name: '🔥 花生燃燒水溫測定卡計裝置',
-            role: '2-1 核心實驗裝置 (點擊進行互動實驗)',
+            role: '2-1 核心實驗裝置 (點擊進行熱量換算實驗)',
             desc: '點燃花生加熱錐形瓶中的水，透過水溫上升度數計算食物釋放的熱量（1卡 = 使 1g 水上升 1℃）！醣類4、蛋白質4、脂質9大卡/克。'
           };
           calGroup.traverse(c => { if (c.isMesh) { c.userData = calMeta; islandMeshes.push(c); } });
           group.add(calGroup);
 
-          // 【2-1 擬真雙層木質試管架與透明玻璃試管】(Wooden Test Tube Rack with Clear Glass Tubes)
+          // (B) 擬真雙層木質試管架與化學變色玻璃試管 (Wooden Rack with Clear Glass Tubes)
           const rackGroup = new THREE.Group();
-          rackGroup.position.set(2.6, 2.1, 1.2);
-
-          const woodMat = getClayMat(0x854d0e, 0.65, 0.05); // 溫潤木紋
+          rackGroup.position.set(2.8, 2.1, 0.8);
+          const woodMat = getClayMat(0x854d0e, 0.65, 0.05);
           const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.28, 1.5), woodMat);
           bottomBar.position.y = 0.14;
-          bottomBar.receiveShadow = true;
           const topBar = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 1.5), woodMat);
           topBar.position.y = 2.4;
           const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 2.4, 1.4), woodMat);
@@ -2180,78 +2354,124 @@
           rightPillar.position.set(2.15, 1.2, 0);
           rackGroup.add(bottomBar, topBar, leftPillar, rightPillar);
 
-          // 4 支真實玻璃試管，內注化學檢測呈色液
           const tubeConfigs = [
-            { name: '澱粉+碘液試管 (藍黑色反應)', color: 0x1e1b4b, emit: 0x172554, label: '澱粉藍黑', note: '常溫滴加碘液，遇澱粉立刻呈深邃藍黑色！' },
-            { name: '葡萄糖+本氏液隔水加熱 (紅橙色沉澱)', color: 0xdc2626, emit: 0xb91c1c, label: '本氏紅橙', note: '高糖分與本氏液隔水加熱後產生紅橙色沉澱！' },
-            { name: '中糖+本氏液隔水加熱 (黃橙色反應)', color: 0xf59e0b, emit: 0xd97706, label: '本氏黃橙', note: '中等糖分呈現黃橙色反應！' },
-            { name: '微糖+本氏液隔水加熱 (黃綠色反應)', color: 0x10b981, emit: 0x059669, label: '本氏微綠', note: '微量糖分呈現黃綠色反應！' }
+            { name: '澱粉+碘液試管 (藍黑色反應)', color: 0x1e1b4b, emit: 0x172554, note: '常溫滴加碘液，遇澱粉立刻呈深邃藍黑色！' },
+            { name: '葡萄糖+本氏液隔水加熱 (紅橙色沉澱)', color: 0xdc2626, emit: 0xb91c1c, note: '高糖分與本氏液隔水加熱後產生紅橙色沉澱！' },
+            { name: '中糖+本氏液隔水加熱 (黃橙色反應)', color: 0xf59e0b, emit: 0xd97706, note: '中等糖分呈現黃橙色反應！' },
+            { name: '微糖+本氏液隔水加熱 (黃綠色反應)', color: 0x10b981, emit: 0x059669, note: '微量糖分呈現黃綠色反應！' }
           ];
-
           tubeConfigs.forEach((cfg, idx) => {
             const posX = -1.4 + idx * 0.95;
-            // 透明外層玻璃試管
             const tubeGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3.2, 16), getGlassMat(0xf0f9ff, 0.4));
             tubeGlass.position.set(posX, 2.0, 0);
-            tubeGlass.castShadow = true;
-            // 試管口玻璃圓唇
             const tubeLip = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.04, 8, 20), getGlassMat(0xffffff, 0.6));
             tubeLip.rotation.x = Math.PI / 2;
             tubeLip.position.set(posX, 3.6, 0);
-            // 內部呈色液體柱
             const liquid = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 2.1, 14), getClayMat(cfg.color, 0.2, 0.1, cfg.emit, 0.35));
             liquid.position.set(posX, 1.45, 0);
-
             const tubeData = {
               unitCode: '2-1',
               targetTab: 'video',
               name: `🧪 ${cfg.name}`,
-              role: '2-1 醣類測定關鍵呈色 (點擊看實驗影音)',
+              role: '2-1 醣類檢驗關鍵呈色 (點擊看實驗影音)',
               desc: cfg.note
             };
             tubeGlass.userData = tubeData;
             liquid.userData = tubeData;
             islandMeshes.push(tubeGlass, liquid);
-
             rackGroup.add(tubeGlass, tubeLip, liquid);
           });
           group.add(rackGroup);
 
-          // 【2-1 動態人物】：營養師小玟（繞島巡邏，點擊開啟 2-1 重點與題庫）
+          // (C) 《皮克敏》經典巨型寶物：鮮紅巨大草莓寶物 (Giant Strawberry Treasure) + 兩隻皮克敏協力搬運
+          const strawGroup = new THREE.Group();
+          strawGroup.position.set(-1.0, 2.1, 3.8);
+
+          const strawMat = getClayMat(0xe11d48, 0.38, 0.12);
+          const strawBody = new THREE.Mesh(new THREE.SphereGeometry(1.2, 18, 18), strawMat);
+          strawBody.scale.set(1.0, 1.35, 1.0);
+          strawBody.position.y = 1.3;
+          strawBody.rotation.z = -0.2;
+          strawGroup.add(strawBody);
+
+          // 草莓頂部綠色花萼 (Green Calyx)
+          const calyxMat = getClayMat(0x16a34a, 0.5, 0.05);
+          for (let s = 0; s < 6; s++) {
+            const sAng = (s / 6) * Math.PI * 2;
+            const sepal = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.65, 6), calyxMat);
+            sepal.position.set(Math.cos(sAng) * 0.45, 2.5, Math.sin(sAng) * 0.45);
+            sepal.rotation.z = Math.cos(sAng) * 0.6;
+            sepal.rotation.x = -Math.sin(sAng) * 0.6;
+            strawGroup.add(sepal);
+          }
+          const strawStem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.5, 8), calyxMat);
+          strawStem.position.set(0, 2.7, 0);
+          strawStem.rotation.z = 0.35;
+          strawGroup.add(strawStem);
+
+          // 2 隻迷你皮克敏（紅皮克敏花朵版、黃皮克敏葉片版）正在齊心合力推草莓！
+          const p1 = createMiniPikmin('red', 'flower', 1.05);
+          p1.pGroup.position.set(-1.15, 0, 0.4);
+          p1.pGroup.rotation.y = Math.PI / 3;
+          const p2 = createMiniPikmin('yellow', 'leaf', 0.95);
+          p2.pGroup.position.set(0.95, 0, -0.3);
+          p2.pGroup.rotation.y = -Math.PI / 2.5;
+          strawGroup.add(p1.pGroup, p2.pGroup);
+
+          const strawMeta = {
+            unitCode: '2-1',
+            targetTab: 'notes',
+            name: '🍓 巨大鮮果寶物與皮克敏搬運隊',
+            role: '2-1 豐富維生素與礦物質來源 (點擊看營養筆記)',
+            desc: '皮克敏搬運的草莓富含「維生素C」，能預防壞血病並增進膠原蛋白合成！水果的果糖提供能量，水與纖維素助消化！'
+          };
+          strawGroup.traverse(c => { if (c.isMesh) { c.userData = strawMeta; islandMeshes.push(c); } });
+          group.add(strawGroup);
+
+          // (D) 【2-1 皮克敏導師】：探險隊長小玟（歐利瑪玻璃頭盔、金色大放大鏡、藍色彩帶）
           const charMeta = {
             unitCode: '2-1',
             targetTab: 'notes',
-            name: '👩‍🔬 營養偵探小玟',
+            name: '👩‍🚀 營養探險隊長小玟',
             role: '2-1 駐島導師 (點擊開啟課程重點/評量/影音)',
-            desc: '「嗨！我是小玟！記住熱量口訣：醣類 4、蛋白質 4、脂質 9 大卡！水、礦物質、維生素雖然 0 大卡，但缺 A 夜盲、缺 C 壞血病、缺鈣軟骨症喔！」'
+            desc: '「嗶嗶！我是探險隊長小玟！記住熱量口訣：醣類 4、蛋白質 4、脂質 9 大卡！水、礦物質、維生素雖然 0 大卡，但缺 A 夜盲、缺 C 壞血病、缺鈣軟骨症喔！」'
           };
-          const charObj = createClayCharacter(0x2563eb, 0x1e1b4b, 'magnifier', charMeta);
+          const charObj = createPikminCaptain(0x2563eb, 0x38bdf8, 'magnifier', charMeta);
           group.add(charObj.charGroup);
           animatedChars.push({ ...charObj, radius: 6.8, speed: 0.75, angle: 0.2, baseY: 2.1 });
-          registerPin(charObj.charGroup, 3.8, '👩‍🔬 營養師小玟', '點我看重點&影音', 'border-blue-400', '2-1', charMeta, 'notes');
+          registerPin(charObj.charGroup, 4.3, '👩‍🚀 隊長小玟', '點我看重點&影音', 'border-blue-400', '2-1', charMeta, 'notes');
 
-          // 【2-1 擬真精緻動態生物】：抱花生小松鼠「波克」（立體耳朵、肚皮、毛絨彎尾、捧花生）
+          // (E) 【2-1 皮克敏生物】：頭頂長嫩葉的抱花生小松鼠「波克」
           const squirrelGroup = new THREE.Group();
-          // 身體與米白肚皮
           const sqBody = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x9a3412, 0.55, 0.05));
           sqBody.scale.set(0.9, 1.15, 0.9);
           sqBody.position.y = 1.0;
           const sqBelly = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0xffedd5, 0.5, 0.05));
           sqBelly.scale.set(0.68, 0.85, 0.45);
           sqBelly.position.set(0, 0.95, 0.48);
-          // 頭部、耳朵、黑鼻子
+
           const sqHead = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0xc2410c, 0.5, 0.05));
           sqHead.scale.setScalar(0.72);
           sqHead.position.set(0, 1.95, 0.35);
-          const earMat = getClayMat(0x7c2d12, 0.55, 0.05);
-          const earL = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), earMat);
+
+          // 皮克敏風格：松鼠頭頂長出一株可愛的皮克敏綠葉！
+          const sqStem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.45, 6), getClayMat(0x16a34a, 0.4, 0.05));
+          sqStem.position.set(0, 2.65, 0.35);
+          const sqLeaf = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), getClayMat(0x22c55e, 0.4, 0.05));
+          sqLeaf.scale.set(1.4, 0.12, 0.8);
+          sqLeaf.position.set(0, 2.85, 0.35);
+          sqLeaf.rotation.x = 0.3;
+
+          const earL = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), getClayMat(0x7c2d12, 0.55, 0.05));
           earL.position.set(-0.35, 2.5, 0.35);
           earL.rotation.z = 0.25;
-          const earR = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), earMat);
+          const earR = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), getClayMat(0x7c2d12, 0.55, 0.05));
           earR.position.set(0.35, 2.5, 0.35);
           earR.rotation.z = -0.25;
+
           const sqNose = new THREE.Mesh(GeoCache.charEye, getClayMat(0x0f172a, 0.2, 0.1));
           sqNose.position.set(0, 1.95, 0.92);
+
           // 蓬鬆 S 曲線立體大尾巴
           const sqTail = new THREE.Group();
           const t1 = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x7c2d12, 0.6, 0.05));
@@ -2263,18 +2483,19 @@
           t2.position.set(0, 1.8, -0.95);
           t2.rotation.x = 0.25;
           sqTail.add(t1, t2);
-          // 前爪緊捧著立體網格花生 (Textured Peanut)
+
+          // 捧著立體紋理花生
           const peanut = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 14), getClayMat(0xfbbf24, 0.6, 0.1));
           peanut.scale.set(0.68, 1.05, 0.68);
           peanut.position.set(0, 1.35, 0.82);
-          peanut.rotation.x = 0.3;
-          const pawL = new THREE.Mesh(GeoCache.charEye, getClayMat(0xc2410c, 0.5, 0.05));
-          pawL.position.set(-0.32, 1.35, 0.75);
-          const pawR = new THREE.Mesh(GeoCache.charEye, getClayMat(0xc2410c, 0.5, 0.05));
-          pawR.position.set(0.32, 1.35, 0.75);
 
-          squirrelGroup.add(sqBody, sqBelly, sqHead, earL, earR, sqNose, sqTail, peanut, pawL, pawR);
-          squirrelGroup.position.set(-4.5, 2.1, 4.2);
+          // 身旁跟著一隻小藍皮克敏
+          const squirrelPikmin = createMiniPikmin('blue', 'bud', 0.82);
+          squirrelPikmin.pGroup.position.set(0.85, 0, 0.4);
+          squirrelPikmin.pGroup.rotation.y = -Math.PI / 4;
+
+          squirrelGroup.add(sqBody, sqBelly, sqHead, sqStem, sqLeaf, earL, earR, sqNose, sqTail, peanut, squirrelPikmin.pGroup);
+          squirrelGroup.position.set(-4.6, 2.1, 2.6);
 
           const sqMeta = {
             unitCode: '2-1',
@@ -2286,256 +2507,450 @@
           squirrelGroup.traverse(c => { if (c.isMesh) { c.userData = sqMeta; islandMeshes.push(c); } });
           group.add(squirrelGroup);
           animatedCreatures.push({ type: 'squirrel', group: squirrelGroup, tail: sqTail, baseY: 2.1, phase: 0 });
-          registerPin(squirrelGroup, 2.9, '🐿️ 松鼠波克', '點我做評量', 'border-sky-400', '2-1', sqMeta, 'quiz');
+          registerPin(squirrelGroup, 3.2, '🐿️ 松鼠波克', '點我做評量', 'border-sky-400', '2-1', sqMeta, 'quiz');
 
+        // ---------------------------------------------------------------------
+        // 【島嶼 2-2】：酵素的作用 (Pikmin 經典恰比 Bulborb 紅斑大嘴怪、晶體鎖鑰、溫差試驗)
+        // ---------------------------------------------------------------------
         } else if (unit.code === '2-2') {
-          // 【2-2 酵素的作用】：巨大鎖鑰受質催化模型
-          const enzymeMesh = new THREE.Mesh(
-            new THREE.TorusGeometry(2.7, 1.05, 20, 40, Math.PI * 1.55),
-            getClayMat(0x06b6d4, 0.35, 0.1, 0x06b6d4, 0.18)
+          // (A) 《皮克敏》神還原：紅斑大嘴怪「恰比」(Bulborb / 酵素怪獸「卡卡」)
+          // 圓滾身軀、前半奶油臉、後半鮮紅大白點、高聳眼柄圓大眼、黃色爪足、大嘴開合吞吐受質
+          const bulborbGroup = new THREE.Group();
+          bulborbGroup.position.set(3.2, 2.1, -2.4);
+
+          // 恰比身軀 (後半部鮮紅、前半部奶油色臉孔)
+          const bulborbBody = new THREE.Mesh(new THREE.SphereGeometry(1.65, 22, 22), getClayMat(0xdc2626, 0.45, 0.08));
+          bulborbBody.scale.set(1.15, 1.1, 1.35);
+          bulborbBody.position.y = 1.6;
+          bulborbBody.castShadow = true;
+
+          // 前半部奶油色大臉 (Cream-colored Face)
+          const bulborbFace = new THREE.Mesh(new THREE.SphereGeometry(1.42, 20, 20), getClayMat(0xfef3c7, 0.45, 0.05));
+          bulborbFace.scale.set(1.08, 0.95, 1.1);
+          bulborbFace.position.set(0, 1.45, 0.65);
+
+          // 後半身 6 顆鮮明白色斑點 (Classic White Polka Dots)
+          const dotMat = getClayMat(0xffffff, 0.35, 0.05);
+          const dotCoords = [
+            [-0.75, 2.1, -0.65], [0.75, 2.1, -0.65],
+            [-0.85, 1.6, -1.15], [0.85, 1.6, -1.15],
+            [0, 2.45, -0.85], [0, 1.7, -1.45]
+          ];
+          dotCoords.forEach(([dx, dy, dz]) => {
+            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), dotMat);
+            dot.scale.set(1.0, 0.4, 1.0);
+            dot.position.set(dx, dy, dz);
+            bulborbGroup.add(dot);
+          });
+
+          // 恰比高聳眼柄與大黑亮眼眸 (Stalk Eyes)
+          const eyeStalkL = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.65, 10), getClayMat(0xfef3c7, 0.45, 0.05));
+          eyeStalkL.position.set(-0.55, 2.65, 0.55);
+          eyeStalkL.rotation.z = -0.25;
+          const eyeStalkR = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.65, 10), getClayMat(0xfef3c7, 0.45, 0.05));
+          eyeStalkR.position.set(0.55, 2.65, 0.55);
+          eyeStalkR.rotation.z = 0.25;
+
+          const eyeBallL = new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 14), getClayMat(0xffffff, 0.2, 0.1));
+          eyeBallL.position.set(-0.65, 3.0, 0.62);
+          const eyeBallR = new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 14), getClayMat(0xffffff, 0.2, 0.1));
+          eyeBallR.position.set(0.65, 3.0, 0.62);
+
+          const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), getClayMat(0x0a0f1d, 0.1, 0.1));
+          pupilL.position.set(-0.65, 3.0, 0.94);
+          const pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), getClayMat(0x0a0f1d, 0.1, 0.1));
+          pupilR.position.set(0.65, 3.0, 0.94);
+
+          // 恰比巨嘴與雪白尖牙 (Bulborb Mouth & Fangs)
+          const mouthM = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), getClayMat(0x991b1b, 0.4, 0.05));
+          mouthM.rotation.x = 1.35;
+          mouthM.position.set(0, 1.25, 1.45);
+          const fangL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 6), dotMat);
+          fangL.position.set(-0.45, 1.4, 1.6);
+          fangL.rotation.x = -Math.PI / 1.5;
+          const fangR = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 6), dotMat);
+          fangR.position.set(0.45, 1.4, 1.6);
+          fangR.rotation.x = -Math.PI / 1.5;
+
+          // 恰比粗壯小黃腿與三趾白爪 (Stubby Yellow Legs & Claws)
+          const legYMat = getClayMat(0xfbbf24, 0.5, 0.05);
+          const bLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.95, 10), legYMat);
+          bLegL.position.set(-0.85, 0.55, -0.1);
+          const bLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.95, 10), legYMat);
+          bLegR.position.set(0.85, 0.55, -0.1);
+          const bFootL = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.65), legYMat);
+          bFootL.position.set(-0.85, 0.12, 0.15);
+          const bFootR = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.65), legYMat);
+          bFootR.position.set(0.85, 0.12, 0.15);
+
+          // 浮空受質八面體（示範專一性受質催化）
+          const bSubstrate = new THREE.Mesh(new THREE.OctahedronGeometry(0.48, 0), getClayMat(0x38bdf8, 0.2, 0.1, 0x0284c7, 0.6));
+          bSubstrate.position.set(0, 1.95, 2.15);
+
+          // 旁邊站著一隻好奇又緊張的小藍皮克敏
+          const bulborbPikmin = createMiniPikmin('blue', 'flower', 1.0);
+          bulborbPikmin.pGroup.position.set(-1.85, 0, 1.4);
+          bulborbPikmin.pGroup.rotation.y = Math.PI / 3;
+
+          bulborbGroup.add(
+            bulborbBody, bulborbFace,
+            eyeStalkL, eyeStalkR, eyeBallL, eyeBallR, pupilL, pupilR,
+            mouthM, fangL, fangR,
+            bLegL, bLegR, bFootL, bFootR,
+            bSubstrate, bulborbPikmin.pGroup
           );
-          enzymeMesh.position.set(-1.5, 5.2, 0);
-          enzymeMesh.castShadow = true;
-          enzymeMesh.userData = {
+
+          const bulborbMeta = {
+            unitCode: '2-2',
+            targetTab: 'quiz',
+            name: '👾 紅斑大嘴怪「恰比」(酵素怪獸卡卡)',
+            role: '2-2 專一性與 pH 示範生物 (點擊挑戰評量)',
+            desc: '「阿姆阿姆！我只吃特定的受質鑰匙！記住會考三大酸鹼度：胃蛋白酶愛強酸 pH 2、唾液澱粉酶愛中性 pH 7、小腸胰液愛弱鹼 pH 8！」'
+          };
+          bulborbGroup.traverse(c => { if (c.isMesh) { c.userData = bulborbMeta; islandMeshes.push(c); } });
+          group.add(bulborbGroup);
+          animatedCreatures.push({ type: 'bulborb', group: bulborbGroup, sub: bSubstrate, eyeL: eyeBallL, eyeR: eyeBallR, baseY: 2.1, phase: 0 });
+          registerPin(bulborbGroup, 3.8, '👾 恰比大嘴怪', '點我做評量', 'border-purple-400', '2-2', bulborbMeta, 'quiz');
+
+          // (B) 巨大生化晶體「鎖與鑰匙」專一性模型 (Crystal Lock-and-Key Mechanism)
+          const lockGroup = new THREE.Group();
+          lockGroup.position.set(-2.4, 2.1, -1.2);
+
+          const lockFlower = new THREE.Mesh(
+            new THREE.TorusGeometry(2.4, 0.85, 18, 36, Math.PI * 1.6),
+            getClayMat(0x06b6d4, 0.3, 0.1, 0x0891b2, 0.28)
+          );
+          lockFlower.position.y = 3.6;
+          lockFlower.rotation.z = -0.4;
+          const keyGemModel = new THREE.Mesh(
+            new THREE.OctahedronGeometry(1.25, 0),
+            getClayMat(0xec4899, 0.25, 0.15, 0xdb2777, 0.4)
+          );
+          keyGemModel.position.set(0.5, 3.6, 0.3);
+
+          // 2 隻迷你皮克敏（發光皮克敏與黃皮克敏）正在合力抬鑰匙！
+          const pKey1 = createMiniPikmin('glow', 'bud', 0.95);
+          pKey1.pGroup.position.set(0.2, 2.0, 0.6);
+          const pKey2 = createMiniPikmin('yellow', 'flower', 0.95);
+          pKey2.pGroup.position.set(0.9, 2.0, 0.6);
+          lockGroup.add(lockFlower, keyGemModel, pKey1.pGroup, pKey2.pGroup);
+
+          const lockMeta = {
             unitCode: '2-2',
             targetTab: 'notes',
-            name: '酵素與受質「鎖與鑰匙」專一性模型',
-            role: '2-2 生物催化劑核心構造',
-            desc: '酵素主成分是蛋白質，具有活性位點（鎖孔），只對特定受質（鑰匙）有專一性！反應前後酵素本身質量不變，可重複使用。'
+            name: '🔑 酵素與受質「鎖與鑰匙」專一性模型',
+            role: '2-2 活性位點與受質結合 (點擊看重點筆記)',
+            desc: '酵素主成分是蛋白質，具有專屬形狀的活性位點（鎖孔），只對特定受質（鑰匙）催化！反應前後酵素質量不變，可重複使用。'
           };
-          group.add(enzymeMesh);
-          islandMeshes.push(enzymeMesh);
+          lockGroup.traverse(c => { if (c.isMesh) { c.userData = lockMeta; islandMeshes.push(c); } });
+          group.add(lockGroup);
 
-          const substrateMesh = new THREE.Mesh(new THREE.OctahedronGeometry(1.45, 0), getClayMat(0xec4899, 0.3, 0.1, 0xdb2777, 0.25));
-          substrateMesh.position.set(0.3, 5.2, 0);
-          substrateMesh.userData = enzymeMesh.userData;
-          group.add(substrateMesh);
-          islandMeshes.push(substrateMesh);
+          // (C) 溫差試驗地標：透光低溫冰磚 (Ice Block) 與 沸水加熱燒杯 (Boiling Beaker)
+          const tempGroup = new THREE.Group();
+          tempGroup.position.set(-0.8, 2.1, 3.2);
 
-          // 【2-2 動態人物】：生化博士小槿
+          // 霧面透光冰塊 (Frosted Low-Temp Ice Block)
+          const iceBlock = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), getGlassMat(0xbae6fd, 0.5));
+          iceBlock.position.set(-1.1, 0.85, 0);
+          const frozenTube = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.3, 10), getClayMat(0x38bdf8, 0.4, 0.1));
+          frozenTube.position.set(-1.1, 0.85, 0);
+          frozenTube.rotation.z = 0.2;
+
+          // 沸水高溫燒杯 (Boiling Beaker with Steam Bubbles)
+          const hotBeaker = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 18), getGlassMat(0xfecdd3, 0.4));
+          hotBeaker.position.set(1.2, 0.9, 0);
+          const hotWater = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.68, 1.2, 16), getClayMat(0xf43f5e, 0.25, 0.1, 0xe11d48, 0.35));
+          hotWater.position.set(1.2, 0.75, 0);
+
+          tempGroup.add(iceBlock, frozenTube, hotBeaker, hotWater);
+          const tempMeta = {
+            unitCode: '2-2',
+            targetTab: 'notes',
+            name: '🌡️ 溫度對酵素活性影響 (冰塊低溫 vs 沸水高溫)',
+            role: '2-2 會考極高頻必考陷阱',
+            desc: '★關鍵考點：0℃ 冰塊只讓酵素「暫時休眠」，回溫到 37℃ 即可復活；超過 60℃ 沸水會使蛋白質「永久變性破壞」，降溫也無法復原！'
+          };
+          tempGroup.traverse(c => { if (c.isMesh) { c.userData = tempMeta; islandMeshes.push(c); } });
+          group.add(tempGroup);
+
+          // (D) 【2-2 皮克敏導師】：生化博士小槿（青藍探險服、催化晶體滴管、青綠發光信號燈）
           const charMeta = {
             unitCode: '2-2',
             targetTab: 'notes',
-            name: '🧑‍🔬 生化博士小槿',
+            name: '🧑‍🚀 生化探險博士小槿',
             role: '2-2 駐島導師 (點擊開啟活性曲線與影音)',
-            desc: '「記住會考必考鐵律：冰塊低溫只會讓酵素暫時冬眠，回溫到 37℃ 就能復活；但只要煮沸高溫超過 60℃，蛋白質就會永久變性死亡，降溫也沒救囉！」'
+            desc: '「嗶嗶！我是小槿博士！記住酵素四大天王特性：主成分是蛋白質、具專一性、能重複使用、受溫度與酸鹼值深刻影響喔！」'
           };
-          const charObj = createClayCharacter(0x0891b2, 0x0f172a, 'key', charMeta);
+          const charObj = createPikminCaptain(0x0891b2, 0x22d3ee, 'key', charMeta);
           group.add(charObj.charGroup);
           animatedChars.push({ ...charObj, radius: 6.8, speed: 0.72, angle: 1.8, baseY: 2.1 });
-          registerPin(charObj.charGroup, 3.8, '🧑‍🔬 小槿博士', '點我看重點&影音', 'border-cyan-400', '2-2', charMeta, 'notes');
+          registerPin(charObj.charGroup, 4.3, '🧑‍🚀 小槿博士', '點我看重點&影音', 'border-cyan-400', '2-2', charMeta, 'notes');
 
-          // 【2-2 動態生物】：鎖孔酵素小怪獸「卡卡」（吞吐分解受質）
-          const monsterGroup = new THREE.Group();
-          const mBody = new THREE.Mesh(
-            new THREE.SphereGeometry(1.45, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.78),
-            getClayMat(0x8b5cf6, 0.4, 0.1, 0x7c3aed, 0.2)
-          );
-          mBody.rotation.x = 0.35;
-          mBody.position.y = 1.4;
-          const mSub = new THREE.Mesh(GeoCache.sphereLow, getClayMat(0x38bdf8, 0.3, 0.1, 0x0284c7, 0.4));
-          mSub.scale.setScalar(0.55);
-          mSub.position.set(0, 2.2, 0.6);
-          monsterGroup.add(mBody, mSub);
-          monsterGroup.position.set(4.2, 2.1, -3.5);
-
-          const mMeta = {
-            unitCode: '2-2',
-            targetTab: 'quiz',
-            name: '👾 酵素催化小精靈「卡卡」',
-            role: '2-2 專一性與 pH 示範生物 (點擊挑戰評量)',
-            desc: '「阿姆阿姆！我只吃澱粉受質，不吃纖維素！而且不同的酵素喜歡不同酸鹼度：胃蛋白酶愛強酸 pH 2、唾液澱粉酶愛中性 pH 7、小腸胰液愛弱鹼 pH 8！」'
-          };
-          monsterGroup.traverse(c => { if (c.isMesh) { c.userData = mMeta; islandMeshes.push(c); } });
-          group.add(monsterGroup);
-          animatedCreatures.push({ type: 'enzyme', group: monsterGroup, sub: mSub, baseY: 2.1, phase: 1.2 });
-          registerPin(monsterGroup, 3.0, '👾 酵素怪獸卡卡', '點我做評量', 'border-purple-400', '2-2', mMeta, 'quiz');
-
+        // ---------------------------------------------------------------------
+        // 【島嶼 2-3】：植物如何獲得養分 (Pikmin 巨型幸運草能量樹、半月保衛細胞、七彩光蝶、脫色裝置)
+        // ---------------------------------------------------------------------
         } else if (unit.code === '2-3') {
-          // 【2-3 植物如何獲得養分】：葉綠體大樹 + 半月形保衛細胞氣孔
-          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.6, 5.2, 16), getClayMat(0x78350f, 0.75, 0.05));
-          trunk.position.set(-2.2, 4.2, -1.5);
-          trunk.castShadow = true;
-          group.add(trunk);
+          // (A) 《皮克敏》森林巨木：多層次垂淚幸運草能量巨樹 (Giant Clover & Chloroplast Tree)
+          const treeGroup = new THREE.Group();
+          treeGroup.position.set(-2.5, 2.1, -1.8);
 
-          const crown = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x10b981, 0.45, 0.05));
-          crown.scale.set(4.2, 3.4, 4.2);
-          crown.position.set(-2.2, 7.6, -1.5);
+          // 盤根錯節厚實泥木樹幹
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.8, 5.8, 16), getClayMat(0x78350f, 0.72, 0.05));
+          trunk.position.y = 2.9;
+          trunk.castShadow = true;
+          treeGroup.add(trunk);
+
+          // 幸運草巨大蓬鬆葉冠
+          const crown = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x10b981, 0.42, 0.06));
+          crown.scale.set(4.4, 3.5, 4.4);
+          crown.position.y = 7.6;
           crown.castShadow = true;
-          crown.userData = {
+          treeGroup.add(crown);
+
+          // 葉冠周圍鑲嵌 6 顆剔透的自發光葉綠體晶球 (Glowing Chloroplast Orbs)
+          const clMat = getClayMat(0x86efac, 0.2, 0.1, 0x22c55e, 0.85);
+          for (let c = 0; c < 6; c++) {
+            const cAng = (c / 6) * Math.PI * 2;
+            const clOrb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 12), clMat);
+            clOrb.position.set(Math.cos(cAng) * 3.4, 7.6 + Math.sin(cAng * 2) * 0.6, Math.sin(cAng) * 3.4);
+            treeGroup.add(clOrb);
+          }
+
+          // 頂冠金黃太陽蜜球 (Radiant Solar Nectar Orb - 光能泉源)
+          const sunNectar = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16), getClayMat(0xfbbf24, 0.15, 0.05, 0xf59e0b, 0.95));
+          sunNectar.position.y = 10.5;
+          treeGroup.add(sunNectar);
+
+          const treeMeta = {
             unitCode: '2-3',
             targetTab: 'notes',
-            name: '葉綠體光合作用能量樹',
+            name: '🌳 葉綠體光合能量神木與太陽蜜球',
             role: '2-3 光反應與碳反應雙階段',
-            desc: '光反應：葉綠素吸光分解「水」釋放「氧氣」；碳反應：酵素利用能量將「二氧化碳」合成為「葡萄糖」與「水」！反應物與產物都有水！'
+            desc: '光反應在葉綠餅吸收光能，把水分解產生「氧氣」；碳反應在基質利用能量，把二氧化碳合成「葡萄糖」與水！原料與產物都有水！'
           };
-          group.add(crown);
-          islandMeshes.push(crown);
+          treeGroup.traverse(c => { if (c.isMesh) { c.userData = treeMeta; islandMeshes.push(c); } });
+          group.add(treeGroup);
 
-          // 保衛細胞半月形氣孔模型（可隨呼吸開合）
+          // (B) 兩兩成對的保衛細胞與氣孔門戶 (Plump Guard Cells with Chloroplast Beads)
           const stomataGroup = new THREE.Group();
-          const guardL = new THREE.Mesh(
-            new THREE.TorusGeometry(1.2, 0.48, 14, 28, Math.PI),
-            getClayMat(0x34d399, 0.35, 0.1, 0x10b981, 0.25)
-          );
+          stomataGroup.position.set(3.4, 2.1, 2.0);
+
+          const guardMat = getClayMat(0x34d399, 0.35, 0.1, 0x10b981, 0.35);
+          const guardL = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.52, 16, 32, Math.PI), guardMat);
           guardL.rotation.z = Math.PI / 2;
-          guardL.position.x = -0.25;
-          const guardR = new THREE.Mesh(
-            new THREE.TorusGeometry(1.2, 0.48, 14, 28, Math.PI),
-            getClayMat(0x34d399, 0.35, 0.1, 0x10b981, 0.25)
-          );
+          guardL.position.set(-0.28, 2.2, 0);
+          const guardR = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.52, 16, 32, Math.PI), guardMat);
           guardR.rotation.z = -Math.PI / 2;
-          guardR.position.x = 0.25;
-          stomataGroup.add(guardL, guardR);
-          stomataGroup.position.set(3.5, 3.6, 2.2);
+          guardR.position.set(0.28, 2.2, 0);
+
+          // 保衛細胞內的綠色葉綠體顆粒
+          const gDotMat = getClayMat(0x065f46, 0.3, 0.1, 0x10b981, 0.6);
+          const gd1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), gDotMat);
+          gd1.position.set(-1.1, 2.2, 0.35);
+          const gd2 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), gDotMat);
+          gd2.position.set(1.1, 2.2, 0.35);
+          stomataGroup.add(guardL, guardR, gd1, gd2);
 
           const stMeta = {
             unitCode: '2-3',
             targetTab: 'quiz',
-            name: '🌱 半月形保衛細胞與氣孔',
-            role: '2-3 氣體交換與蒸散門戶 (點擊挑戰評量)',
-            desc: '「我們是兩兩成對的半月形保衛細胞！注意考點：一般表皮細胞透明無葉綠體，整片葉子只有『葉肉細胞』和我們『保衛細胞』有葉綠體喔！」'
+            name: '🌱 半月形保衛細胞與氣孔呼吸門戶',
+            role: '2-3 氣體交換與水分蒸散 (點擊挑戰評量)',
+            desc: '「我們是兩兩成對的保衛細胞！表皮細胞透明無葉綠體，整片葉表皮只有我們保衛細胞擁有葉綠體能行光合作用喔！」'
           };
           stomataGroup.traverse(c => { if (c.isMesh) { c.userData = stMeta; islandMeshes.push(c); } });
           group.add(stomataGroup);
           animatedCreatures.push({ type: 'stomata', group: stomataGroup, guardL, guardR, phase: 0 });
-          registerPin(stomataGroup, 2.5, '🌱 保衛細胞氣孔', '點我做評量', 'border-emerald-400', '2-3', stMeta, 'quiz');
+          registerPin(stomataGroup, 3.6, '🌱 保衛細胞氣孔', '點我做評量', 'border-emerald-400', '2-3', stMeta, 'quiz');
 
-          // 【2-3 動態人物】：植物園丁綠芽
+          // (C) 酒精隔水加熱脫色試驗台 (Alcohol Decoloration Station)
+          const decolGroup = new THREE.Group();
+          decolGroup.position.set(-1.2, 2.1, 3.4);
+          const decPot = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.4, 18), getGlassMat(0xf0fdf4, 0.35));
+          decPot.position.y = 0.8;
+          const innerTube = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.8, 14), getGlassMat(0xffffff, 0.5));
+          innerTube.position.set(0, 1.1, 0);
+          const leafInTube = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.04), getClayMat(0x6ee7b7, 0.4, 0.05));
+          leafInTube.position.set(0, 0.9, 0);
+          leafInTube.rotation.z = 0.2;
+          decolGroup.add(decPot, innerTube, leafInTube);
+
+          const decMeta = {
+            unitCode: '2-3',
+            targetTab: 'lab',
+            name: '🍃 葉片酒精隔水加熱脫色裝置',
+            role: '2-3 經典必考實驗裝置 (點擊進行實驗模擬)',
+            desc: '葉綠素不溶於水但溶於酒精；因為酒精燃點極低易起火，必須「隔水加熱」！脫色漂洗後滴加碘液，受光處變藍黑色！'
+          };
+          decolGroup.traverse(c => { if (c.isMesh) { c.userData = decMeta; islandMeshes.push(c); } });
+          group.add(decolGroup);
+
+          // (D) 【2-3 皮克敏導師】：植物園丁綠芽（翡翠綠探險服、銅製澆水器、翠綠發光信號燈）
           const charMeta = {
             unitCode: '2-3',
             targetTab: 'notes',
-            name: '🧑‍🌾 植物園丁綠芽',
+            name: '🧑‍🌾 植物園丁探險家綠芽',
             role: '2-3 駐島導師 (點擊開啟脫色實驗與重點)',
-            desc: '「測定澱粉實驗四部曲：1.沸水煮軟葉片 → 2.酒精『隔水加熱』溶出葉綠素（防起火！）→ 3.溫水漂洗 → 4.滴碘液驗澱粉，照光處變藍黑色！」'
+            desc: '「嗶嗶！我是園丁綠芽！測定澱粉實驗四部曲：1.沸水煮軟葉片 → 2.酒精『隔水加熱』溶出葉綠素 → 3.溫水漂洗 → 4.滴碘液驗澱粉！」'
           };
-          const charObj = createClayCharacter(0x059669, 0x064e3b, 'watering', charMeta);
+          const charObj = createPikminCaptain(0x059669, 0x34d399, 'watering', charMeta);
           group.add(charObj.charGroup);
           animatedChars.push({ ...charObj, radius: 6.8, speed: 0.7, angle: 3.4, baseY: 2.1 });
-          registerPin(charObj.charGroup, 3.8, '🧑‍🌾 園丁綠芽', '點我看重點&實驗', 'border-emerald-400', '2-3', charMeta, 'notes');
+          registerPin(charObj.charGroup, 4.3, '🧑‍🌾 園丁綠芽', '點我看重點&實驗', 'border-emerald-400', '2-3', charMeta, 'notes');
 
-          // 【2-3 動態生物】：拍翅採蜜粉蝶「拂綠」（改為櫻花粉紫配色，無黃色）
+          // (E) 【2-3 皮克敏生物】：七彩琉璃光蝶「拂綠」(Pikmin Spectralid Butterfly)
           const butterflyGroup = new THREE.Group();
-          const wingGeo = new THREE.BoxGeometry(1.1, 0.08, 1.4);
-          const wingMat = getClayMat(0xf472b6, 0.3, 0.1, 0xec4899, 0.35);
-          const wingL = new THREE.Mesh(wingGeo, wingMat);
-          wingL.position.x = -0.55;
-          const wingR = new THREE.Mesh(wingGeo, wingMat);
-          wingR.position.x = 0.55;
-          butterflyGroup.add(wingL, wingR);
-          butterflyGroup.position.set(0, 7.2, 0);
+          const bfWingMat = getGlassMat(0xf472b6, 0.45); // 琉璃透光彩翅
+          const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 1.5), bfWingMat);
+          wingL.position.x = -0.65;
+          const wingR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 1.5), bfWingMat);
+          wingR.position.x = 0.65;
+          const bfBody = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.2, 8), getClayMat(0x831843, 0.4, 0.1));
+          bfBody.rotation.x = Math.PI / 2;
+
+          butterflyGroup.add(wingL, wingR, bfBody);
+          butterflyGroup.position.set(-2.5, 8.5, -1.8);
 
           const bfMeta = {
             unitCode: '2-3',
             targetTab: 'video',
-            name: '🦋 採蜜粉蝶「拂綠」',
+            name: '🦋 七彩琉璃光蝶「拂綠」',
             role: '2-3 光合產物傳遞使者 (點擊看教學影音)',
-            desc: '「植物在葉肉合成的葡萄糖，會轉換成蔗糖經由葉脈『韌皮部』輸送到花朵變成甜美的花蜜，或送到根部儲存成澱粉喔！」'
+            desc: '「植物在葉肉細胞合成的葡萄糖，會轉換成蔗糖經由韌皮部輸送到全身花朵變成花蜜，或儲存在根莖成為澱粉喔！」'
           };
           butterflyGroup.traverse(c => { if (c.isMesh) { c.userData = bfMeta; islandMeshes.push(c); } });
           group.add(butterflyGroup);
           animatedCreatures.push({ type: 'butterfly', group: butterflyGroup, wingL, wingR, phase: 0.5 });
-          registerPin(butterflyGroup, 1.8, '🦋 粉蝶拂綠', '點我看影音', 'border-pink-400', '2-3', bfMeta, 'video');
+          registerPin(butterflyGroup, 2.2, '🦋 七彩光蝶拂綠', '點我看影音', 'border-pink-400', '2-3', bfMeta, 'video');
 
+        // ---------------------------------------------------------------------
+        // 【島嶼 2-4】：動物如何獲得養分 (Pikmin 消化道雲霄飛車、肝膽小腸迷宮、水螅生物)
+        // ---------------------------------------------------------------------
         } else if (unit.code === '2-4') {
-          // 【2-4 動物如何獲得養分】：胃、肝膽(綠)、小腸絨毛迷宮
+          // (A) 《皮克敏》微觀奇景：透明消化道雲霄飛車 (Digestive Rollercoaster Track)
+          const trackGroup = new THREE.Group();
+          trackGroup.position.set(-2.2, 2.1, -1.5);
+
+          // 胃囊模型 (pH≈2 強酸肌肉囊袋)
           const stomach = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0xf43f5e, 0.42, 0.08));
-          stomach.scale.set(2.3, 3.0, 1.9);
-          stomach.position.set(-2.6, 4.8, -1.2);
+          stomach.scale.set(2.4, 3.2, 2.0);
+          stomach.position.set(0, 3.8, 0);
           stomach.rotation.z = 0.45;
           stomach.castShadow = true;
-          stomach.userData = {
+          trackGroup.add(stomach);
+
+          // 幽門連接至盤繞螺旋小腸 (Coiled Intestinal Spring with Villi)
+          const intestine = new THREE.Mesh(
+            new THREE.TorusKnotGeometry(2.2, 0.55, 64, 14, 2, 3),
+            getClayMat(0xfb7185, 0.42, 0.05)
+          );
+          intestine.position.set(3.8, 2.8, 2.2);
+          intestine.castShadow = true;
+          trackGroup.add(intestine);
+
+          // 軌道上滑動的發光食糜小晶球 (Moving Food Chyme Orb)
+          const foodOrb = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), getClayMat(0xfbbf24, 0.2, 0.1, 0xf59e0b, 0.95));
+          foodOrb.position.set(0, 5.2, 0);
+          trackGroup.add(foodOrb);
+
+          const trackMeta = {
             unitCode: '2-4',
             targetTab: 'notes',
-            name: '胃囊與胃腺模型 (pH≈2 強酸)',
-            role: '2-4 蛋白質初步分解場所',
-            desc: '胃液含鹽酸（殺菌、提供強酸環境）與胃蛋白酶，是人體最早開始分解「蛋白質」的器官！'
+            name: '🎢 消化道與指狀絨毛吸收迷宮',
+            role: '2-4 食物分解與吸收終極主戰場',
+            desc: '食物只走消化道（口→咽→食道→胃→小腸→大腸→肛門）！小腸內壁布滿指狀「絨毛」，大幅增加表面積，是吸收水與養分最多的器官！'
           };
-          group.add(stomach);
-          islandMeshes.push(stomach);
+          trackGroup.traverse(c => { if (c.isMesh) { c.userData = trackMeta; islandMeshes.push(c); } });
+          group.add(trackGroup);
 
-          // 肝臟與翠綠膽囊（必考無酵素乳化）
-          const gall = new THREE.Mesh(GeoCache.sphereMed, getClayMat(0x10b981, 0.3, 0.1, 0x059669, 0.25));
-          gall.scale.set(1.3, 1.7, 1.3);
-          gall.position.set(1.2, 5.2, -2.2);
-          gall.userData = {
+          // (B) 肝臟與翠綠膽囊 (Liver & Emerald Gallbladder - 會考第一陷阱題)
+          const gallGroup = new THREE.Group();
+          gallGroup.position.set(1.5, 2.1, -2.8);
+
+          const liverLobe = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 16), getClayMat(0x991b1b, 0.5, 0.05));
+          liverLobe.scale.set(1.5, 0.8, 1.2);
+          liverLobe.position.y = 2.4;
+
+          const gallBladder = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 14), getClayMat(0x10b981, 0.25, 0.1, 0x059669, 0.45));
+          gallBladder.scale.set(0.8, 1.4, 0.8);
+          gallBladder.position.set(0.4, 1.6, 0.6);
+
+          gallGroup.add(liverLobe, gallBladder);
+          const gallMeta = {
             unitCode: '2-4',
             targetTab: 'quiz',
-            name: '肝臟與膽囊（分泌膽汁注入小腸）',
-            role: '2-4 會考第一陷阱題霸主',
-            desc: '★滿分鐵律：肝臟製造膽汁、膽囊儲存膽汁、經膽管注入小腸！膽汁「完全不含任何消化酵素」，只負責物理乳化脂質（大油滴變小油滴）！'
+            name: '🟢 肝臟與翠綠膽囊（分泌膽汁注入小腸）',
+            role: '2-4 會考第一陷阱題霸主 (點擊做評量)',
+            desc: '★滿分鐵律：肝臟製造膽汁、膽囊儲存膽汁！注意：膽汁「完全不含任何消化酵素」，只負責物理乳化脂質（大油滴變成小油滴）！'
           };
-          group.add(gall);
-          islandMeshes.push(gall);
+          gallGroup.traverse(c => { if (c.isMesh) { c.userData = gallMeta; islandMeshes.push(c); } });
+          group.add(gallGroup);
 
-          // 螺旋小腸與指狀絨毛
-          const intestine = new THREE.Mesh(
-            new THREE.TorusKnotGeometry(2.1, 0.52, 64, 12, 2, 3),
-            getClayMat(0xfb7185, 0.45, 0.05)
-          );
-          intestine.position.set(2.4, 3.8, 1.8);
-          intestine.castShadow = true;
-          intestine.userData = {
-            unitCode: '2-4',
-            targetTab: 'video',
-            name: '小腸與指狀絨毛吸收迷宮',
-            role: '2-4 消化與吸收終極主戰場',
-            desc: '匯集膽汁、胰液（唯一全能分解醣、蛋、脂）、腸液！內壁布滿指狀「絨毛」大幅增加吸收表面積，是吸收養分與水分最多的地方！'
-          };
-          group.add(intestine);
-          islandMeshes.push(intestine);
-
-          // 【2-4 動態人物】：微縮探險隊長漢克
+          // (C) 【2-4 皮克敏導師】：消化探險隊長漢克（橘紅太空服、金屬光錐探照燈、琥珀發光信號燈）
           const charMeta = {
             unitCode: '2-4',
             targetTab: 'notes',
             name: '🧑‍🚀 消化探險隊長漢克',
             role: '2-4 駐島導師 (點擊開啟消化全表與影音)',
-            desc: '「食物只走消化道（口→咽→食道→胃→小腸→大腸→肛門），絕對不會鑽進肝臟、膽囊或胰臟裡面喔！排便叫『排遺』，不是代謝排泄！」'
+            desc: '「嗶嗶！我是隊長漢克！食物絕對不會鑽進肝臟或胰臟裡！而且排便叫『排遺』，把細胞代謝廢物排出才叫『排泄』喔！」'
           };
-          const charObj = createClayCharacter(0xe11d48, 0x0f172a, 'torch', charMeta);
+          const charObj = createPikminCaptain(0xe11d48, 0xfbbf24, 'torch', charMeta);
           group.add(charObj.charGroup);
           animatedChars.push({ ...charObj, radius: 6.8, speed: 0.76, angle: 5.0, baseY: 2.1 });
-          registerPin(charObj.charGroup, 3.8, '🧑‍🚀 隊長漢克', '點我看重點&影音', 'border-rose-400', '2-4', charMeta, 'notes');
+          registerPin(charObj.charGroup, 4.3, '🧑‍🚀 隊長漢克', '點我看重點&影音', 'border-rose-400', '2-4', charMeta, 'notes');
 
-          // 【2-4 動態生物】：囊狀消化腔「波浪水螅波波」（觸手擺動捕食）
+          // (D) 【2-4 皮克敏生物】：軟體發光「水螅波波」(Pikmin Aquatic Bloyster / Hydra)
           const hydraGroup = new THREE.Group();
-          const hBody = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.65, 2.5, 16), getClayMat(0x38bdf8, 0.4, 0.1, 0x0284c7, 0.2));
-          hBody.position.y = 1.25;
-          hydraGroup.add(hBody);
+          hydraGroup.position.set(-4.5, 2.1, 3.6);
 
+          // 水螅透光半透明水母鍾狀身軀 (Translucent Jelly Dome)
+          const hBell = new THREE.Mesh(new THREE.SphereGeometry(1.2, 18, 18, 0, Math.PI * 2, 0, Math.PI * 0.65), getGlassMat(0x38bdf8, 0.4));
+          hBell.position.y = 1.6;
+          hydraGroup.add(hBell);
+
+          // 核心發光消化腔 (Bioluminescent Digestive Core)
+          const hCore = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), getClayMat(0xf43f5e, 0.2, 0.1, 0xf43f5e, 0.85));
+          hCore.position.y = 1.35;
+          hydraGroup.add(hCore);
+
+          // 8 條柔軟捲曲擺動的軟觸手
           const tentacles = [];
-          for (let t = 0; t < 6; t++) {
-            const ang = (t / 6) * Math.PI * 2;
-            const tent = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 1.35, 10), getClayMat(0x7dd3fc, 0.35, 0.1));
-            tent.position.set(Math.cos(ang) * 0.45, 2.65, Math.sin(ang) * 0.45);
+          for (let t = 0; t < 8; t++) {
+            const ang = (t / 8) * Math.PI * 2;
+            const tent = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 1.45, 8), getClayMat(0x7dd3fc, 0.35, 0.1, 0x0284c7, 0.25));
+            tent.position.set(Math.cos(ang) * 0.75, 0.75, Math.sin(ang) * 0.75);
             tent.rotation.z = Math.cos(ang) * 0.45;
-            tent.rotation.x = Math.sin(ang) * 0.45;
+            tent.rotation.x = -Math.sin(ang) * 0.45;
             hydraGroup.add(tent);
             tentacles.push({ mesh: tent, ang });
           }
-          hydraGroup.position.set(-4.5, 2.1, 3.8);
+
+          // 身旁跟著一隻水棲小藍皮克敏
+          const hydraPikmin = createMiniPikmin('blue', 'leaf', 0.9);
+          hydraPikmin.pGroup.position.set(1.4, 0, 0.2);
+          hydraGroup.add(hydraPikmin.pGroup);
 
           const hyMeta = {
             unitCode: '2-4',
             targetTab: 'quiz',
             name: '🐙 囊狀消化腔「水螅波波」',
             role: '2-4 單一開口消化演化代表 (點擊做評量)',
-            desc: '「嗨！我是水螅波波！我和海葵、水母一樣只有『單一開口』的囊狀消化腔，吃東西和排殘渣都用同一個洞；不像人類有口和肛門兩個開口的管狀消化道！」'
+            desc: '「嗨！我是水螅波波！我和海葵、水母一樣只有『單一開口』的囊狀消化腔，吃東西和排殘渣都用同一個洞；人類則是口與肛門雙開口的管狀消化道！」'
           };
           hydraGroup.traverse(c => { if (c.isMesh) { c.userData = hyMeta; islandMeshes.push(c); } });
           group.add(hydraGroup);
-          animatedCreatures.push({ type: 'hydra', group: hydraGroup, tentacles, phase: 0.8 });
-          registerPin(hydraGroup, 3.4, '🐙 水螅波波', '點我做評量', 'border-sky-400', '2-4', hyMeta, 'quiz');
+          animatedCreatures.push({ type: 'hydra', group: hydraGroup, tentacles, core: hCore, baseY: 2.1, phase: 0.8 });
+          registerPin(hydraGroup, 3.5, '🐙 水螅波波', '點我做評量', 'border-sky-400', '2-4', hyMeta, 'quiz');
         }
 
         scene.add(group);
       });
     }
 
+    // 4. 宇宙深空漂浮微粒
     function buildFloatingParticles() {
       const geo = new THREE.BufferGeometry();
-      const count = 240;
+      const count = 260;
       const pos = new Float32Array(count * 3);
       for (let i = 0; i < count; i++) {
         pos[i * 3] = (Math.random() - 0.5) * 115;
@@ -2549,7 +2964,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // 動畫主迴圈 (Zero-GC High-FPS Animation Loop)
+    // 動畫主迴圈 (Zero-GC High-FPS Animation Loop with Pikmin Physics)
     // -------------------------------------------------------------------------
     function animate() {
       requestAnimationFrame(animate);
@@ -2557,7 +2972,7 @@
 
       const elapsed = clock.getElapsedTime();
 
-      // 1. 太陽系九大行星公轉與自轉
+      // 1. 太陽系天體巡航公轉與自轉
       for (let i = 0; i < planets.length; i++) {
         const p = planets[i];
         if (p.isCore) {
@@ -2573,7 +2988,7 @@
         }
       }
 
-      // 2. 島上 Q 版導師人物繞島行走與揮手動畫
+      // 2. 皮克敏隊長行走、探照燈擺動與信號燈脈衝
       for (let i = 0; i < animatedChars.length; i++) {
         const ch = animatedChars[i];
         const a = ch.angle + elapsed * ch.speed * 0.45;
@@ -2584,39 +2999,58 @@
         ch.leftLeg.rotation.x = Math.sin(elapsed * 6 + i) * 0.45;
         ch.rightLeg.rotation.x = -Math.sin(elapsed * 6 + i) * 0.45;
         ch.leftArm.rotation.x = -Math.sin(elapsed * 6 + i) * 0.35;
-        ch.marker.position.y = 3.15 + Math.sin(elapsed * 4 + i) * 0.18;
+        ch.marker.position.y = 4.15 + Math.sin(elapsed * 4 + i) * 0.18;
+        if (ch.beacon) {
+          ch.beacon.scale.setScalar(0.9 + Math.sin(elapsed * 6 + i) * 0.15); // 信號燈呼吸脈衝
+        }
       }
 
-      // 3. 島上代表性生物動態行為（松鼠跳躍、酵素吞吐、保衛細胞開合、粉蝶繞樹、水螅擺動）
+      // 3. 《皮克敏》代表生物生動行為動畫
       for (let i = 0; i < animatedCreatures.length; i++) {
         const cr = animatedCreatures[i];
         if (cr.type === 'squirrel') {
+          // 松鼠波克歡樂跳躍與毛尾巴甩動
           cr.group.position.y = cr.baseY + Math.abs(Math.sin(elapsed * 4.2)) * 0.65;
           cr.tail.rotation.x = -0.45 + Math.sin(elapsed * 7) * 0.25;
-        } else if (cr.type === 'enzyme') {
-          cr.group.rotation.y = elapsed * 0.9;
-          cr.sub.position.y = 2.1 + Math.abs(Math.sin(elapsed * 3.2)) * 0.95;
-          cr.sub.rotation.y = elapsed * 2.5;
+        } else if (cr.type === 'bulborb') {
+          // 恰比紅斑大嘴怪：眼柄轉動、身體如果凍微晃、大嘴開合
+          cr.group.rotation.y = Math.sin(elapsed * 1.2) * 0.25;
+          cr.group.position.y = cr.baseY + Math.abs(Math.sin(elapsed * 2.8)) * 0.18;
+          if (cr.sub) {
+            cr.sub.position.y = 1.95 + Math.sin(elapsed * 3.5) * 0.45;
+            cr.sub.rotation.y = elapsed * 2.0;
+          }
+          if (cr.eyeL && cr.eyeR) {
+            cr.eyeL.position.y = 3.0 + Math.sin(elapsed * 5.0) * 0.08;
+            cr.eyeR.position.y = 3.0 + Math.cos(elapsed * 5.0) * 0.08;
+          }
         } else if (cr.type === 'stomata') {
-          const openOffset = 0.22 + (Math.sin(elapsed * 2.4) + 1) * 0.18;
+          // 半月保衛細胞平穩擴張開合呼吸
+          const openOffset = 0.28 + (Math.sin(elapsed * 2.2) + 1) * 0.22;
           cr.guardL.position.x = -openOffset;
           cr.guardR.position.x = openOffset;
         } else if (cr.type === 'butterfly') {
+          // 七彩光蝶拍翅翱翔環繞神木
           const ba = elapsed * 1.1;
-          cr.group.position.set(-2.2 + Math.cos(ba) * 4.5, 7.5 + Math.sin(elapsed * 3.5) * 0.8, -1.5 + Math.sin(ba) * 4.5);
+          cr.group.position.set(-2.5 + Math.cos(ba) * 4.6, 8.5 + Math.sin(elapsed * 3.5) * 0.8, -1.8 + Math.sin(ba) * 4.6);
           cr.group.rotation.y = -ba;
           cr.wingL.rotation.z = Math.sin(elapsed * 18) * 0.65;
           cr.wingR.rotation.z = -Math.sin(elapsed * 18) * 0.65;
         } else if (cr.type === 'hydra') {
-          cr.group.rotation.z = Math.sin(elapsed * 2.2) * 0.12;
+          // 水螅波波鍾狀身軀呼吸與觸手波浪律動
+          cr.group.position.y = cr.baseY + Math.sin(elapsed * 2.5) * 0.15;
+          if (cr.core) {
+            cr.core.scale.setScalar(0.95 + Math.sin(elapsed * 4.2) * 0.12);
+          }
           for (let t = 0; t < cr.tentacles.length; t++) {
             const tent = cr.tentacles[t];
-            tent.mesh.rotation.z = Math.cos(tent.ang) * (0.45 + Math.sin(elapsed * 3.5 + t) * 0.22);
+            tent.mesh.rotation.z = Math.cos(tent.ang) * (0.45 + Math.sin(elapsed * 3.2 + t) * 0.25);
+            tent.mesh.rotation.x = -Math.sin(tent.ang) * (0.45 + Math.cos(elapsed * 3.2 + t) * 0.25);
           }
         }
       }
 
-      // 4. 懸浮光點微幅旋轉
+      // 4. 懸浮深空粒子緩速自轉
       if (floatingParticles) {
         floatingParticles.rotation.y = elapsed * 0.02;
       }
@@ -2634,11 +3068,10 @@
       controls.update();
       renderer.render(scene, camera);
 
-      // 6. 更新 3D 浮空標籤螢幕投影座標
+      // 6. 更新 3D 浮空標籤螢幕投影座標（整數防模糊像素）
       updateBillboardPins();
     }
-
-    function onWindowResize() {
+function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
