@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>STELLA 國中7上自然第2章 3D互動教學微縮群島（WebGL 旗艦優化版）</title>
+  <title>STELLA 國中7上自然第2章 3D互動教學微縮群島（角色動態與生物探究旗艦版）</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome 6 Icons -->
@@ -19,7 +19,6 @@
 
   <style>
     :root {
-      --clay-softness: 12px;
       --font-body: 'Fredoka', 'Noto Sans TC', system-ui, sans-serif;
     }
 
@@ -103,17 +102,7 @@
       background-color: #f59e0b;
     }
 
-    /* 黏土立體按鈕陰影 */
-    .clay-btn {
-      box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 10px 20px -3px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.3);
-      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .clay-btn:active {
-      transform: translateY(4px);
-      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 4px 10px -2px rgba(0, 0, 0, 0.4);
-    }
-
-    /* 微縮浮空標籤氣泡 */
+    /* 微縮浮空對話框與標籤動畫 */
     .floating-bubble {
       box-shadow: 0 12px 28px -5px rgba(0, 0, 0, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.35);
       animation: floatBreath 4s ease-in-out infinite;
@@ -124,13 +113,18 @@
       50% { transform: translateY(-5px); }
     }
 
-    /* 互動元件動畫 */
-    @keyframes pulseGlow {
-      0%, 100% { opacity: 0.8; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.05); }
+    /* 角色懸浮對話卡進入動畫 */
+    @keyframes cardSlideUp {
+      from { opacity: 0; transform: translate(-50%, 25px) scale(0.96); }
+      to { opacity: 1; transform: translate(-50%, 0) scale(1); }
     }
-    .pulse-glow {
-      animation: pulseGlow 2.5s infinite ease-in-out;
+    .animate-card-slide {
+      animation: cardSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* 互動游標提示 */
+    .interactive-hover-badge {
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
   </style>
 </head>
@@ -159,7 +153,7 @@
         </div>
         <h1 class="text-base sm:text-lg font-black tracking-wide text-white drop-shadow flex items-center gap-2">
           3D 互動教學微縮群島
-          <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-mono">WebGL 60FPS</span>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 font-mono">角色＆生物動態版</span>
         </h1>
       </div>
     </div>
@@ -200,12 +194,51 @@
     </div>
   </header>
 
-  <!-- 3D 懸浮互動說明氣泡 (底端中) -->
-  <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none text-center">
+  <!-- 3D 懸浮動態操作提示氣泡 (底端中) -->
+  <div id="bottom-hint" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none text-center transition-opacity duration-300">
     <div class="floating-bubble px-4 py-2.5 rounded-full bg-slate-900/85 border border-white/15 backdrop-blur-md text-xs sm:text-sm text-slate-200 flex items-center gap-2.5 shadow-2xl">
-      <i class="fa-solid fa-hand-pointer text-amber-400 animate-bounce"></i>
-      <span>點選任意<b>浮空微縮島嶼</b>或<b>上方按鈕</b>開啟章節全方位教材</span>
-      <span class="hidden sm:inline text-slate-400">| 滑鼠拖曳旋轉、滾輪平滑縮放</span>
+      <i class="fa-solid fa-wand-magic-sparkles text-amber-400 animate-bounce"></i>
+      <span>點選島上<b>人物（小玟、小槿、小園丁、隊長）</b>或<b>活體生物（松鼠、水螅、蝴蝶、酵素精靈）</b>即刻展開學習！</span>
+      <span class="hidden sm:inline text-slate-400">| 拖曳滑鼠旋轉視角</span>
+    </div>
+  </div>
+
+  <!-- 人物/生物點選互動彈出對話卡 (Mentor Dialogue Card) -->
+  <div id="entity-dialogue-card" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 w-[92%] sm:w-[520px] max-w-lg glassmorphism rounded-3xl p-5 border border-white/20 shadow-2xl hidden animate-card-slide">
+    <div class="flex items-start gap-4">
+      <!-- 角色/生物大頭頭像 -->
+      <div id="card-avatar-wrap" class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-white shadow-lg shrink-0 border border-white/20">
+        <i id="card-avatar-icon" class="fa-solid fa-user-astronaut"></i>
+      </div>
+      <!-- 對話文字內容 -->
+      <div class="flex-1 space-y-1.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span id="card-badge" class="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-amber-500/25 text-amber-300 border border-amber-400/30">2-1 專屬導師</span>
+            <h3 id="card-name" class="text-base font-bold text-white tracking-wide">營養分析師 小玟</h3>
+          </div>
+          <button onclick="closeEntityDialogue()" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+        <p id="card-speech" class="text-xs sm:text-sm text-slate-200 leading-relaxed pt-1">
+          哈囉！我是小玟～你知道 1 公克的脂肪能產生 9 大卡能量，而醣類和蛋白質只有 4 大卡嗎？快來跟我一起做花生燃燒熱量與糖類測定實驗吧！
+        </p>
+      </div>
+    </div>
+    <!-- 底部行動鈕 -->
+    <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between gap-3">
+      <span class="text-[11px] text-slate-400 flex items-center gap-1.5">
+        <i class="fa-solid fa-sparkles text-amber-400"></i> <span id="card-hint">點擊前往完整教學</span>
+      </span>
+      <div class="flex items-center gap-2">
+        <button onclick="closeEntityDialogue()" class="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs text-slate-300 font-semibold transition-colors">
+          繼續在島上逛逛
+        </button>
+        <button onclick="openLearningFromEntity()" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:brightness-110 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/25 transition-transform active:scale-95">
+          <i class="fa-solid fa-book-open"></i> 進入本單元深入學習
+        </button>
+      </div>
     </div>
   </div>
 
@@ -291,31 +324,31 @@
           <i class="fa-solid fa-compass"></i>
         </div>
         <div>
-          <h3 class="text-lg font-bold text-white">微縮群島探索與 WebGL 優化指南</h3>
-          <p class="text-xs text-slate-400">Tilt-shift Miniature & Clay Aesthetic Architecture</p>
+          <h3 class="text-lg font-bold text-white">微縮群島探索指南（人物＆生物動態）</h3>
+          <p class="text-xs text-slate-400">Interactive Chibi Characters & Creatures Showcase</p>
         </div>
       </div>
       <ul class="space-y-3 text-xs sm:text-sm text-slate-300">
         <li class="flex items-start gap-2.5">
-          <i class="fa-solid fa-microchip text-emerald-400 mt-1"></i>
-          <span><b>WebGL 架構優化：</b>採用幾何共享緩存（Geometry/Material Cache Pool）、單一主陰影錐體、動態時間阻尼（Exponential Damping）與防突波幀率平滑演算法。</span>
+          <i class="fa-solid fa-user-check text-amber-400 mt-1"></i>
+          <span><b>四大島嶼專屬人物：</b>2-1 營養分析師小玟、2-2 生化博士小槿、2-3 植物小園丁綠芽、2-4 消化探險家隊長漢克，各自在島上動態值班。</span>
         </li>
         <li class="flex items-start gap-2.5">
-          <i class="fa-solid fa-palette text-amber-400 mt-1"></i>
-          <span><b>黏土移軸美學 (Clay Aesthetic)：</b>高粗糙度無金屬質感漫反射材質，搭配上下移軸模糊（Tilt-shift）與柔和暗角（Vignette）。</span>
+          <i class="fa-solid fa-paw text-emerald-400 mt-1"></i>
+          <span><b>栩栩如生微縮生物：</b>2-1 抱花生嚼嚼小松鼠、2-2 鎖孔酵素小怪獸、2-3 拍翅發光粉蝶與呼吸保衛細胞、2-4 觸手波浪水螅與微血管小兵。</span>
         </li>
         <li class="flex items-start gap-2.5">
-          <i class="fa-solid fa-planet-ringed text-cyan-400 mt-1"></i>
-          <span><b>九大天體星系：</b>遠景配置太陽與八大行星物理公轉軌道、光環與粒子星海，可切換 3x 超速巡航。</span>
+          <i class="fa-solid fa-hand-pointer text-cyan-400 mt-1"></i>
+          <span><b>點擊人物/生物直接學習：</b>點選 3D 場景中的人物或生物，鏡頭將無人機特寫滑翔聚焦，並彈出專屬導師對話引導進入單元教材！</span>
         </li>
         <li class="flex items-start gap-2.5">
-          <i class="fa-solid fa-cubes text-rose-400 mt-1"></i>
-          <span><b>四大單元島嶼：</b>2-1 養分能量、2-2 酵素催化、2-3 光合作用、2-4 消化吸收，含歷屆會考題庫與 STELLA 探究。</span>
+          <i class="fa-solid fa-microchip text-purple-400 mt-1"></i>
+          <span><b>60FPS 效能架構：</b>採用幾何池化共享與無 GC 迴圈動畫，維持微距移軸（Tilt-shift）黏土美學與太陽系 9 大天體背景。</span>
         </li>
       </ul>
       <div class="pt-2 border-t border-white/10 text-center">
         <button onclick="toggleHelpModal()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-white font-bold hover:brightness-110 shadow-lg text-sm">
-          進入微縮群島探索
+          開始探索活體島嶼
         </button>
       </div>
     </div>
@@ -342,14 +375,32 @@
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(480, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(720, this.ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(780, this.ctx.currentTime + 0.08);
         gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
         gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         osc.start();
         osc.stop(this.ctx.currentTime + 0.08);
+      },
+      playCharacterVoice() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [440, 554.37, 659.25].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+          gain.gain.setValueAtTime(0.14, now + idx * 0.06);
+          gain.gain.linearRampToValueAtTime(0.001, now + idx * 0.06 + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.06);
+          osc.stop(now + idx * 0.06 + 0.15);
+        });
       },
       playCorrect() {
         if (!this.enabled) return;
@@ -418,7 +469,6 @@
         icon: 'fa-solid fa-burger',
         notes: `
           <div class="space-y-4 text-xs sm:text-sm">
-            <!-- 核心概念導引 -->
             <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 leading-relaxed">
               <h4 class="font-bold text-amber-300 text-sm sm:text-base mb-1.5 flex items-center gap-2">
                 <i class="fa-solid fa-fire-flame-curved text-amber-400"></i> 焦點一：六大養分與熱量換算核心
@@ -1056,13 +1106,19 @@
     let isAutoRotating = true;
     let solarSpeedFactor = 1.0;
     let islandPickList = [];
-    let hoveredMesh = null;
-    let explorerChibi;
+    let interactiveEntityList = []; // 人物與活體生物可點擊實體名單
+    let hoveredEntity = null;
     let clock;
 
     // 相機平滑滑翔目標控制 (Cinematic Camera Smoothing)
     let cameraTargetPos = null;
     let lookTargetPos = null;
+
+    // 動態動畫更新清單
+    const animUpdaters = [];
+
+    // 當前選中的導師實體資料
+    let currentSelectedEntity = null;
 
     // 視窗尺寸
     const container = document.getElementById('webgl-container');
@@ -1092,7 +1148,9 @@
       GeoCache.testTube = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10);
       GeoCache.villus = new THREE.CylinderGeometry(0.3, 0.36, 1.8, 8);
       GeoCache.cloudPuff = new THREE.SphereGeometry(2.0, 8, 8);
-      GeoCache.bridgePlank = new THREE.BoxGeometry(2.5, 0.7, 1);
+      GeoCache.chibiHead = new THREE.SphereGeometry(0.85, 16, 16);
+      GeoCache.chibiBody = new THREE.CylinderGeometry(0.48, 0.6, 0.95, 12);
+      GeoCache.chibiLimb = new THREE.CylinderGeometry(0.18, 0.18, 0.7, 8);
     }
 
     // 黏土微縮漫反射材質工廠 (高粗糙度、零金屬光澤)
@@ -1119,19 +1177,18 @@
       // 1. 場景
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x060914);
-      scene.fog = new THREE.FogExp2(0x0a1024, 0.0065); // 營造深空景深光學
+      scene.fog = new THREE.FogExp2(0x0a1024, 0.0065);
 
       // 2. 相機 (42度微縮微距透視)
       camera = new THREE.PerspectiveCamera(42, width / height, 0.8, 1400);
       camera.position.set(0, 48, 85);
 
-      // 3. WebGL 渲染器 (效能極限優化)
+      // 3. WebGL 渲染器
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         powerPreference: 'high-performance'
       });
       renderer.setSize(width, height);
-      // 限制裝置像素比在 1.5 ~ 2 之間，平衡 Retina 高清與 60fps 幀率
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1143,17 +1200,16 @@
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
-      controls.maxPolarAngle = Math.PI / 2.08; // 仰角限制
-      controls.minDistance = 16;
+      controls.maxPolarAngle = Math.PI / 2.08;
+      controls.minDistance = 12;
       controls.maxDistance = 190;
       controls.autoRotate = false;
       controls.target.set(0, 4, 0);
 
-      // 5. 光源架構 (微縮黏土工作室 Key + Fill + Rim 柔光系統)
-      const ambientLight = new THREE.AmbientLight(0xfff6ea, 1.35);
+      // 5. 光源架構 (微縮黏土工作室柔光)
+      const ambientLight = new THREE.AmbientLight(0xfff6ea, 1.38);
       scene.add(ambientLight);
 
-      // 主暖太陽光 (Directional Shadow Light)
       const mainSunLight = new THREE.DirectionalLight(0xfffaed, 1.85);
       mainSunLight.position.set(50, 80, 45);
       mainSunLight.castShadow = true;
@@ -1169,13 +1225,11 @@
       mainSunLight.shadow.normalBias = 0.02;
       scene.add(mainSunLight);
 
-      // 藍紫色天空弱補光 (提昇底層黏土層次)
       const skyFillLight = new THREE.DirectionalLight(0x739af0, 0.7);
       skyFillLight.position.set(-50, 45, -45);
       scene.add(skyFillLight);
 
-      // 柔和邊緣金黃光 (Rim Light)
-      const rimLight = new THREE.PointLight(0xfcd34d, 1.1, 130);
+      const rimLight = new THREE.PointLight(0xfcd34d, 1.15, 130);
       rimLight.position.set(0, 32, -55);
       scene.add(rimLight);
 
@@ -1189,22 +1243,18 @@
       createSolarSystemPlanets();
       createArchipelago();
       createAtmosphericClouds();
-      createExplorerChibi();
 
       // 8. 事件監聽
       window.addEventListener('resize', onWindowResize, false);
       renderer.domElement.addEventListener('pointerdown', onScenePointerDown, false);
       renderer.domElement.addEventListener('pointermove', onScenePointerMove, false);
-
-      // 支援鍵盤快速鍵切換 (1, 2, 3, 4, 0, ESC)
       window.addEventListener('keydown', onKeyDown, false);
     }
 
     /* --------------------------------------------------------------------------
-       2.3 太陽系 9 大天體巡航背景 (太陽 + 8大行星)
+       2.3 太陽系 9 大天體巡航背景
        -------------------------------------------------------------------------- */
     function createDeepSpaceEnvironment() {
-      // 隨機閃爍星辰粒子群
       const starsCount = 2600;
       const starPositions = new Float32Array(starsCount * 3);
       const starColors = new Float32Array(starsCount * 3);
@@ -1218,7 +1268,6 @@
         starPositions[i + 1] = radius * Math.sin(phi) * Math.sin(theta);
         starPositions[i + 2] = radius * Math.cos(phi);
 
-        // 星光微色溫（藍白、暖黃、粉紫）
         starColors[i] = 0.82 + Math.random() * 0.18;
         starColors[i + 1] = 0.85 + Math.random() * 0.15;
         starColors[i + 2] = 0.95 + Math.random() * 0.05;
@@ -1242,14 +1291,13 @@
       solarSystemGroup = new THREE.Group();
       scene.add(solarSystemGroup);
 
-      // 太陽中心 (Sun) - 宏偉遠景
+      // 太陽
       const sunGeo = new THREE.SphereGeometry(10.5, 32, 32);
       const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
       const sunMesh = new THREE.Mesh(sunGeo, sunMat);
       sunMesh.position.set(0, 68, -240);
       solarSystemGroup.add(sunMesh);
 
-      // 太陽日冕光輝線框
       const glowGeo = new THREE.SphereGeometry(13.8, 24, 24);
       const glowMat = new THREE.MeshBasicMaterial({
         color: 0xff6600,
@@ -1260,7 +1308,6 @@
       const sunGlow = new THREE.Mesh(glowGeo, glowMat);
       sunMesh.add(sunGlow);
 
-      // 行星參數定義 (水、金、地、火、木、土、天王、海王)
       const planetData = [
         { name: '水星 Mercury', dist: 78, size: 1.15, color: 0xa3a3a3, speed: 0.024, incl: 0.05 },
         { name: '金星 Venus', dist: 98, size: 1.7, color: 0xeab308, speed: 0.018, incl: 0.03 },
@@ -1273,7 +1320,6 @@
       ];
 
       planetData.forEach((data) => {
-        // 橢圓公轉軌道線
         const orbitCurve = new THREE.EllipseCurve(0, 0, data.dist, data.dist * 0.95, 0, 2 * Math.PI, false, 0);
         const points = orbitCurve.getPoints(128);
         const orbitGeo = new THREE.BufferGeometry().setFromPoints(points);
@@ -1284,12 +1330,10 @@
         orbitLine.position.set(0, 16, -65);
         solarSystemGroup.add(orbitLine);
 
-        // 行星球體
         const pGeo = new THREE.SphereGeometry(data.size, 20, 20);
         const pMat = getClayMaterial(data.color, 0.75);
         const planetMesh = new THREE.Mesh(pGeo, pMat);
 
-        // 特殊：土星雙環
         if (data.hasRing) {
           const ringGeo = new THREE.RingGeometry(data.size * 1.45, data.size * 2.4, 32);
           const ringMat = new THREE.MeshBasicMaterial({
@@ -1303,7 +1347,6 @@
           planetMesh.add(ringMesh);
         }
 
-        // 地球之月球
         if (data.hasMoon) {
           const moonGeo = new THREE.SphereGeometry(data.size * 0.28, 12, 12);
           const moonMat = getClayMaterial(0xe2e8f0, 0.9);
@@ -1325,7 +1368,7 @@
     }
 
     /* --------------------------------------------------------------------------
-       2.4 核心教學微縮群島建構 (Archipelago Dioramas)
+       2.4 核心教學微縮群島建構 (Archipelago Dioramas & Connecting Bridges)
        -------------------------------------------------------------------------- */
     function createArchipelago() {
       islandsGroup = new THREE.Group();
@@ -1351,6 +1394,7 @@
         title: '2-1 養分與能量'
       });
       createNutrientIslandDetails(island21);
+      createIsland21Actors(island21); // 加入人物小玟與活體松鼠
 
       // (C) 2-2 酵素催化島 (Enzyme Biocatalysts)
       const island22 = createHexIsland({
@@ -1361,6 +1405,7 @@
         title: '2-2 酵素催化'
       });
       createEnzymeIslandDetails(island22);
+      createIsland22Actors(island22); // 加入人物小槿與酵素鎖孔怪獸
 
       // (D) 2-3 光合作用島 (Photosynthesis)
       const island23 = createHexIsland({
@@ -1371,6 +1416,7 @@
         title: '2-3 光合作用'
       });
       createPhotosynthesisIslandDetails(island23);
+      createIsland23Actors(island23); // 加入小園丁綠芽、飛舞粉蝶與保衛細胞
 
       // (E) 2-4 消化吸收島 (Digestion & Absorption)
       const island24 = createHexIsland({
@@ -1381,6 +1427,7 @@
         title: '2-4 消化與吸收'
       });
       createDigestionIslandDetails(island24);
+      createIsland24Actors(island24); // 加入隊長漢克、波浪水螅與微血管小兵
 
       // (F) 島嶼之間的微縮黏土拱橋
       createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: -32, y: 0, z: -25 });
@@ -1389,7 +1436,6 @@
       createConnectingBridge({ x: 0, y: 2.5, z: 0 }, { x: 32, y: 0, z: 25 });
     }
 
-    // 建造六角幾何島嶼底座 (使用 Geometry 緩存池)
     function createHexIsland({ id, x, y, z, isCenter = false, topColor, baseColor, title }) {
       const group = new THREE.Group();
       group.position.set(x, y, z);
@@ -1399,13 +1445,11 @@
       const topGeo = isCenter ? GeoCache.centerTop : GeoCache.hexIslandTop;
       const h = isCenter ? 6.2 : 5.5;
 
-      // 下層地層基石
       const baseMesh = new THREE.Mesh(baseGeo, getClayMaterial(baseColor, 0.92));
       baseMesh.castShadow = true;
       baseMesh.receiveShadow = true;
       group.add(baseMesh);
 
-      // 頂部草地/黏土薄層
       const topMesh = new THREE.Mesh(topGeo, getClayMaterial(topColor, 0.85));
       topMesh.position.y = h / 2 + 0.45;
       topMesh.castShadow = true;
@@ -1413,7 +1457,6 @@
       topMesh.userData = { id, title, isClickable: true, parentGroup: group };
       group.add(topMesh);
 
-      // 島嶼底盤發光光環
       const ringMat = new THREE.MeshBasicMaterial({
         color: topColor,
         side: THREE.DoubleSide,
@@ -1425,14 +1468,12 @@
       hoverRing.position.y = -h / 2 - 0.25;
       group.add(hoverRing);
 
-      // 註冊至點擊碰撞檢測池
       islandPickList.push(topMesh);
       islandsGroup.add(group);
 
       return group;
     }
 
-    // 黏土拱橋連結
     function createConnectingBridge(p1, p2) {
       const distance = Math.hypot(p2.x - p1.x, p2.z - p1.z);
       const bridgeGroup = new THREE.Group();
@@ -1441,14 +1482,12 @@
       const angle = Math.atan2(p2.x - p1.x, p2.z - p1.z);
       bridgeGroup.rotation.y = angle;
 
-      // 橋面
       const plankGeo = new THREE.BoxGeometry(2.4, 0.6, distance * 0.72);
       const plankMesh = new THREE.Mesh(plankGeo, getClayMaterial(0xe2e8f0, 0.9));
       plankMesh.castShadow = true;
       plankMesh.receiveShadow = true;
       bridgeGroup.add(plankMesh);
 
-      // 橋墩
       for (let i = -1; i <= 1; i += 2) {
         const pillarGeo = new THREE.CylinderGeometry(0.45, 0.45, 4.2, 8);
         const pillar = new THREE.Mesh(pillarGeo, getClayMaterial(0x94a3b8, 0.9));
@@ -1459,12 +1498,10 @@
       islandsGroup.add(bridgeGroup);
     }
 
-    // 中央核心科技島微縮景觀：浮空發光八面體與衛星環
     function createCenterDioramaDetails() {
       const centerGroup = new THREE.Group();
       centerGroup.position.set(0, 7.8, 0);
 
-      // 浮空能量晶體
       const coreGeo = new THREE.OctahedronGeometry(2.8, 0);
       const coreMat = new THREE.MeshStandardMaterial({
         color: 0x60a5fa,
@@ -1476,7 +1513,6 @@
       coreMesh.name = 'stealaCore';
       centerGroup.add(coreMesh);
 
-      // 環繞軌道圈
       const ringGeo = new THREE.TorusGeometry(4.4, 0.2, 12, 48);
       const ringMat = new THREE.MeshBasicMaterial({ color: 0x93c5fd });
       const ringMesh = new THREE.Mesh(ringGeo, ringMat);
@@ -1484,7 +1520,6 @@
       ringMesh.name = 'coreOrbitRing';
       centerGroup.add(ringMesh);
 
-      // 六邊外圍微縮黏土小樹
       for (let i = 0; i < 6; i++) {
         const ang = (i / 6) * Math.PI * 2;
         const tree = createClayTree(0x38bdf8, 0x1e3a8a);
@@ -1495,31 +1530,26 @@
       islandsGroup.add(centerGroup);
     }
 
-    // 2-1 養分島微縮景觀：食物熱量測定卡計、糖類分子積木
     function createNutrientIslandDetails(parentGroup) {
       const topY = 3.6;
 
-      // 燃燒熱量卡計圓筒
       const caloGeo = new THREE.CylinderGeometry(1.6, 1.8, 4.0, 16);
       const calo = new THREE.Mesh(caloGeo, getClayMaterial(0xf59e0b));
       calo.position.set(0, topY + 2.0, 0);
       calo.castShadow = true;
       parentGroup.add(calo);
 
-      // 卡計水銀/數位溫度計
       const thermGeo = new THREE.CylinderGeometry(0.18, 0.18, 3.2, 8);
       const therm = new THREE.Mesh(thermGeo, getClayMaterial(0xef4444, 0.5));
       therm.position.set(0.6, topY + 3.4, 0);
       parentGroup.add(therm);
 
-      // 燃燒火苗 (小水滴形錐體)
       const flameGeo = new THREE.ConeGeometry(0.85, 1.8, 8);
       const flameMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xd97706, roughness: 0.4 });
       const flame = new THREE.Mesh(flameGeo, flameMat);
       flame.position.set(0, topY + 4.4, 0);
       parentGroup.add(flame);
 
-      // 三大產能養分立體積木 (醣類-土司方塊、蛋白質-球體、脂質-角錐)
       const carbBox = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.7, 1.7), getClayMaterial(0xfde047));
       carbBox.position.set(-4.2, topY + 0.85, -2.6);
       carbBox.castShadow = true;
@@ -1535,16 +1565,13 @@
       lipidPyramid.castShadow = true;
       parentGroup.add(lipidPyramid);
 
-      // 蘑菇與微縮裝飾
       parentGroup.add(createClayMushroom(-5.2, topY, 1.4, 0xfcd34d));
       parentGroup.add(createClayMushroom(3.8, topY, 4.2, 0xfde68a));
     }
 
-    // 2-2 酵素島微縮景觀：鑰匙與鎖孔活性位立體配對模型、三色試管架
     function createEnzymeIslandDetails(parentGroup) {
       const topY = 3.6;
 
-      // 巨大酵素基質模型 (圓環凹口)
       const enzymeBodyGeo = new THREE.TorusGeometry(2.5, 1.15, 16, 32, Math.PI * 1.65);
       const enzymeBody = new THREE.Mesh(enzymeBodyGeo, getClayMaterial(0x0284c7));
       enzymeBody.rotation.x = Math.PI / 2;
@@ -1552,14 +1579,12 @@
       enzymeBody.castShadow = true;
       parentGroup.add(enzymeBody);
 
-      // 契合受質小球
       const substrateGeo = new THREE.SphereGeometry(1.25, 16, 16);
       const substrate = new THREE.Mesh(substrateGeo, getClayMaterial(0x38bdf8));
       substrate.position.set(1.6, topY + 2.5, 0);
       substrate.castShadow = true;
       parentGroup.add(substrate);
 
-      // 試管架 (pH 檢測：胃酸紅、唾液綠、小腸藍)
       const rack = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 1.3), getClayMaterial(0x64748b));
       rack.position.set(-3.6, topY + 0.2, 3.2);
       parentGroup.add(rack);
@@ -1572,15 +1597,12 @@
         parentGroup.add(tube);
       }
 
-      // 活性藍水晶簇
       parentGroup.add(createClayCrystalCluster(4.4, topY, -2.6, 0x0ea5e9));
     }
 
-    // 2-3 光合島微縮景觀：巨型立體翠綠葉片、保衛細胞雙氣孔
     function createPhotosynthesisIslandDetails(parentGroup) {
       const topY = 3.6;
 
-      // 巨型翠綠葉片模型
       const leafShape = new THREE.Shape();
       leafShape.moveTo(0, 0);
       leafShape.quadraticCurveTo(2.6, 3.8, 0, 7.4);
@@ -1594,15 +1616,6 @@
       leafMesh.castShadow = true;
       parentGroup.add(leafMesh);
 
-      // 保衛細胞對 (成雙半月圓環)
-      const guardGeo = new THREE.TorusGeometry(1.25, 0.48, 12, 24);
-      const guardCell = new THREE.Mesh(guardGeo, getClayMaterial(0x34d399));
-      guardCell.rotation.x = Math.PI / 2;
-      guardCell.position.set(-4.0, topY + 0.5, 3.4);
-      guardCell.castShadow = true;
-      parentGroup.add(guardCell);
-
-      // 光反應晶瑩小水滴
       const waterDrop = new THREE.Mesh(new THREE.SphereGeometry(0.85, 14, 14), new THREE.MeshStandardMaterial({
         color: 0x67e8f9,
         roughness: 0.18,
@@ -1613,16 +1626,13 @@
       waterDrop.position.set(3.8, topY + 1.5, 2.6);
       parentGroup.add(waterDrop);
 
-      // 綠意小灌木
       parentGroup.add(createClayTree(0x10b981, 0x064e3b, 1.25, -4.8, topY, -3.2));
       parentGroup.add(createClayTree(0x059669, 0x064e3b, 0.95, 4.8, topY, -3.6));
     }
 
-    // 2-4 消化島微縮景觀：人體粉紅胃工坊、小腸絨毛叢林
     function createDigestionIslandDetails(parentGroup) {
       const topY = 3.6;
 
-      // 可愛黏土粉紅「胃 (Stomach)」
       const stomachGeo = new THREE.TorusGeometry(1.9, 1.15, 16, 24, Math.PI * 1.35);
       const stomachMesh = new THREE.Mesh(stomachGeo, getClayMaterial(0xf43f5e));
       stomachMesh.rotation.z = -0.55;
@@ -1630,7 +1640,6 @@
       stomachMesh.castShadow = true;
       parentGroup.add(stomachMesh);
 
-      // 肝臟與綠色膽囊
       const liverMesh = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.3, 5), getClayMaterial(0x9f1239));
       liverMesh.rotation.z = 1.25;
       liverMesh.position.set(-4.8, topY + 1.5, 2.0);
@@ -1640,7 +1649,6 @@
       gallBladder.position.set(-3.8, topY + 1.3, 2.4);
       parentGroup.add(gallBladder);
 
-      // 小腸絨毛叢林 (指狀突起微縮陣列)
       const villiGroup = new THREE.Group();
       villiGroup.position.set(3.4, topY, 1.6);
       for (let i = 0; i < 8; i++) {
@@ -1655,7 +1663,497 @@
     }
 
     /* --------------------------------------------------------------------------
-       2.5 輔助黏土模型 (樹、蘑菇、水晶、探險家 Chibi 小人)
+       2.5 【全新升級】四大島嶼人物 (Characters) 與活體生物 (Creatures) 動態系統
+       -------------------------------------------------------------------------- */
+
+    // (A) 2-1 養分島：人物小玟 (Min) + 活體抱花生嚼嚼小松鼠 (Poko)
+    function createIsland21Actors(parentGroup) {
+      const topY = 3.6;
+
+      // 1. 人物：營養分析師 小玟
+      const minGroup = new THREE.Group();
+      minGroup.position.set(-2.8, topY + 0.2, 1.6);
+      minGroup.rotation.y = 0.4;
+
+      const head = new THREE.Mesh(GeoCache.chibiHead, getClayMaterial(0xffedd5));
+      head.position.y = 1.8;
+      minGroup.add(head);
+
+      // 小玟雙馬尾髮辮
+      const hairMat = getClayMaterial(0x78350f);
+      const hairL = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), hairMat);
+      hairL.position.set(-0.9, 1.9, -0.2);
+      minGroup.add(hairL);
+      const hairR = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), hairMat);
+      hairR.position.set(0.9, 1.9, -0.2);
+      minGroup.add(hairR);
+
+      // 探險黃帽子
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.35, 16), getClayMaterial(0xf59e0b));
+      hat.position.y = 2.3;
+      minGroup.add(hat);
+
+      // 身穿實驗探險袍
+      const body = new THREE.Mesh(GeoCache.chibiBody, getClayMaterial(0xfef08a));
+      body.position.y = 0.95;
+      minGroup.add(body);
+
+      // 手持溫度計
+      const toolArm = new THREE.Mesh(GeoCache.chibiLimb, getClayMaterial(0xef4444));
+      toolArm.rotation.x = Math.PI / 3;
+      toolArm.position.set(0.55, 1.1, 0.4);
+      minGroup.add(toolArm);
+
+      // 註冊點選互動
+      const minHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      minHitbox.position.y = 1.5;
+      minHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'char-2-1',
+          name: '營養分析師 小玟',
+          islandKey: '2-1',
+          badge: '2-1 核心人物導師',
+          avatarIcon: 'fa-solid fa-user-graduate',
+          themeColor: '#f59e0b',
+          speech: '哈囉！我是小玟！你知道 1 公克的脂肪能產生 9 大卡能量，而醣類和蛋白質只有 4 大卡嗎？人體就算在睡覺，心跳與呼吸也在持續消耗「基礎代謝率」喔！點擊右下方按鈕立即學習六大養分與本氏液隔水加熱實驗！',
+          hint: '包含六大養分表格、卡計公式與測驗',
+          focusPos: { x: -30, y: 12, z: -16 },
+          lookAtPos: { x: -32, y: 4.5, z: -25 },
+          recommendedTab: 'notes'
+        }
+      };
+      minGroup.add(minHitbox);
+      interactiveEntityList.push(minHitbox);
+      parentGroup.add(minGroup);
+
+      // 動態動畫：踏步與點頭
+      animUpdaters.push((elapsed) => {
+        head.rotation.y = Math.sin(elapsed * 2.5) * 0.2;
+        head.position.y = 1.8 + Math.sin(elapsed * 4) * 0.06;
+        toolArm.rotation.z = Math.sin(elapsed * 3) * 0.15;
+      });
+
+      // 2. 活體生物：抱花生嚼嚼小松鼠 (Chipmunk Poko)
+      const squirrelGroup = new THREE.Group();
+      squirrelGroup.position.set(2.4, topY + 0.2, 1.8);
+      squirrelGroup.rotation.y = -0.5;
+
+      const sqBody = new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 12), getClayMaterial(0xd97706));
+      sqBody.position.y = 0.75;
+      squirrelGroup.add(sqBody);
+
+      const sqHead = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), getClayMaterial(0xfbbf24));
+      sqHead.position.set(0, 1.35, 0.25);
+      squirrelGroup.add(sqHead);
+
+      // 大耳
+      const earL = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 6), getClayMaterial(0xd97706));
+      earL.position.set(-0.35, 1.8, 0.15);
+      squirrelGroup.add(earL);
+      const earR = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 6), getClayMaterial(0xd97706));
+      earR.position.set(0.35, 1.8, 0.15);
+      squirrelGroup.add(earR);
+
+      // 蓬鬆大尾巴
+      const tail = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.35, 10, 16, Math.PI * 1.3), getClayMaterial(0xb45309));
+      tail.position.set(0, 1.0, -0.6);
+      tail.rotation.y = Math.PI / 2;
+      squirrelGroup.add(tail);
+
+      // 抱在胸前的大花生
+      const peanut = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CylinderGeometry(0.25, 0.25, 0.6, 8) : new THREE.SphereGeometry(0.35, 8, 8), getClayMaterial(0xfde68a));
+      peanut.rotation.z = Math.PI / 3;
+      peanut.position.set(0, 0.85, 0.65);
+      squirrelGroup.add(peanut);
+
+      const sqHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.4, 2.2), new THREE.MeshBasicMaterial({ visible: false }));
+      sqHitbox.position.y = 1.0;
+      sqHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'creature-2-1',
+          name: '抱花生小松鼠 波克',
+          islandKey: '2-1',
+          badge: '2-1 活體生動生物',
+          avatarIcon: 'fa-solid fa-paw',
+          themeColor: '#d97706',
+          speech: '嚼嚼嚼～！花生含有滿滿的脂質與蛋白質！在科學實驗中，我們把這顆 1 公克花生燃燒產熱來加熱 100 毫升水，測量水溫上升來換算大卡！但記得喔～大部分熱量會散失到空氣中，所以測出的熱量比真實數值小喔！',
+          hint: '查看食物熱量測定與會考花生燃燒考題',
+          focusPos: { x: -28, y: 10, z: -18 },
+          lookAtPos: { x: -32, y: 4.5, z: -25 },
+          recommendedTab: 'quiz'
+        }
+      };
+      squirrelGroup.add(sqHitbox);
+      interactiveEntityList.push(sqHitbox);
+      parentGroup.add(squirrelGroup);
+
+      // 動態動畫：嚼花生與尾巴搖晃
+      animUpdaters.push((elapsed) => {
+        sqHead.position.y = 1.35 + Math.sin(elapsed * 12) * 0.04;
+        peanut.position.y = 0.85 + Math.sin(elapsed * 12) * 0.03;
+        tail.rotation.x = Math.sin(elapsed * 3.5) * 0.35;
+      });
+    }
+
+    // (B) 2-2 酵素島：人物生化博士小槿 (Chin) + 專一性酵素鎖孔怪獸 (Kaka)
+    function createIsland22Actors(parentGroup) {
+      const topY = 3.6;
+
+      // 1. 人物：生化博士 小槿
+      const chinGroup = new THREE.Group();
+      chinGroup.position.set(2.6, topY + 0.2, 1.8);
+      chinGroup.rotation.y = -0.4;
+
+      const head = new THREE.Mesh(GeoCache.chibiHead, getClayMaterial(0xffedd5));
+      head.position.y = 1.8;
+      chinGroup.add(head);
+
+      // 護目鏡
+      const goggle = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.12, 8, 20), getClayMaterial(0x38bdf8));
+      goggle.position.set(0, 1.88, 0.7);
+      chinGroup.add(goggle);
+
+      const body = new THREE.Mesh(GeoCache.chibiBody, getClayMaterial(0x0284c7));
+      body.position.y = 0.95;
+      chinGroup.add(body);
+
+      // 手持搖晃試管
+      const armTube = new THREE.Mesh(GeoCache.chibiLimb, getClayMaterial(0x67e8f9));
+      armTube.position.set(-0.6, 1.2, 0.4);
+      armTube.rotation.z = -Math.PI / 4;
+      chinGroup.add(armTube);
+
+      const chinHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      chinHitbox.position.y = 1.5;
+      chinHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'char-2-2',
+          name: '生化博士 小槿',
+          islandKey: '2-2',
+          badge: '2-2 核心人物導師',
+          avatarIcon: 'fa-solid fa-flask',
+          themeColor: '#06b6d4',
+          speech: '嗨！我是小槿博士！酵素是生物體內的催化劑，主成分絕大多數是「蛋白質」！因此對溫度極其敏感，煮沸到 100℃ 就會永久變性失活！不同酵素在人體也有專屬的最適 pH 值（胃液強酸 pH 2、唾液中性 pH 7、小腸弱鹼 pH 8），點擊按鈕來看看唾液澱粉水浴實驗！',
+          hint: '查看酵素四大特性、溫度變性與 pH 曲線',
+          focusPos: { x: 30, y: 12, z: -16 },
+          lookAtPos: { x: 32, y: 4.5, z: -25 },
+          recommendedTab: 'notes'
+        }
+      };
+      chinGroup.add(chinHitbox);
+      interactiveEntityList.push(chinHitbox);
+      parentGroup.add(chinGroup);
+
+      animUpdaters.push((elapsed) => {
+        armTube.rotation.z = -Math.PI / 4 + Math.sin(elapsed * 9) * 0.25;
+        head.rotation.x = Math.sin(elapsed * 2) * 0.12;
+      });
+
+      // 2. 活體生物/擬人：專一性酵素精靈 鎖孔卡卡 (Kaka)
+      const kakaGroup = new THREE.Group();
+      kakaGroup.position.set(-2.5, topY + 0.2, 1.6);
+      kakaGroup.rotation.y = 0.6;
+
+      const kakaBody = new THREE.Mesh(new THREE.SphereGeometry(1.1, 14, 14), getClayMaterial(0x0ea5e9));
+      kakaBody.position.y = 1.2;
+      kakaGroup.add(kakaBody);
+
+      // 活性位立體凹口 (Lock Opening)
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.7), getClayMaterial(0x0369a1));
+      mouth.position.set(0, 1.2, 0.8);
+      kakaGroup.add(mouth);
+
+      // 受質小球 (Substrate) - 循環飛向口中咬合對接
+      const subBall = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 12), getClayMaterial(0xfacc15));
+      subBall.position.set(0, 1.2, 1.8);
+      kakaGroup.add(subBall);
+
+      const kakaHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 2.6), new THREE.MeshBasicMaterial({ visible: false }));
+      kakaHitbox.position.y = 1.2;
+      kakaHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'creature-2-2',
+          name: '專一性酵素精靈 鎖孔卡卡',
+          islandKey: '2-2',
+          badge: '2-2 擬人活性精靈',
+          avatarIcon: 'fa-solid fa-shapes',
+          themeColor: '#0284c7',
+          speech: '喀噠！我是專一性酵素精靈！你看我身上的活性位凹槽，只有特定形狀的受質能精準吻合！催化完成後我會把受質切開並釋放產物，而我自己的質量與化學結構完全不變，可以反覆重複使用喔！',
+          hint: '觀看鎖與鑰匙假說動畫與酵素反應模擬',
+          focusPos: { x: 34, y: 10, z: -18 },
+          lookAtPos: { x: 32, y: 4.5, z: -25 },
+          recommendedTab: 'video'
+        }
+      };
+      kakaGroup.add(kakaHitbox);
+      interactiveEntityList.push(kakaHitbox);
+      parentGroup.add(kakaGroup);
+
+      animUpdaters.push((elapsed) => {
+        // 受質對接循環動畫
+        const cycle = (Math.sin(elapsed * 3) + 1) / 2; // 0 ~ 1
+        subBall.position.z = 0.8 + cycle * 1.4;
+        kakaBody.scale.y = 1 + Math.sin(elapsed * 3) * 0.08;
+      });
+    }
+
+    // (C) 2-3 光合島：植物小園丁綠芽 (Bud) + 翩翩拍翅粉蝶 (Flutter) + 保衛細胞雙子
+    function createIsland23Actors(parentGroup) {
+      const topY = 3.6;
+
+      // 1. 人物：植物小園丁 綠芽
+      const budGroup = new THREE.Group();
+      budGroup.position.set(-2.8, topY + 0.2, 1.4);
+      budGroup.rotation.y = 0.4;
+
+      const head = new THREE.Mesh(GeoCache.chibiHead, getClayMaterial(0xffedd5));
+      head.position.y = 1.8;
+      budGroup.add(head);
+
+      // 小園丁遮陽草帽
+      const strawHat = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.25, 16), getClayMaterial(0xd97706));
+      strawHat.position.y = 2.25;
+      budGroup.add(strawHat);
+
+      const body = new THREE.Mesh(GeoCache.chibiBody, getClayMaterial(0x10b981));
+      body.position.y = 0.95;
+      budGroup.add(body);
+
+      // 手持綠色小水壺
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.6, 8), getClayMaterial(0x34d399));
+      pot.position.set(0.65, 1.0, 0.5);
+      budGroup.add(pot);
+
+      const budHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      budHitbox.position.y = 1.5;
+      budHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'char-2-3',
+          name: '植物小園丁 綠芽',
+          islandKey: '2-3',
+          badge: '2-3 核心人物導師',
+          avatarIcon: 'fa-solid fa-seedling',
+          themeColor: '#10b981',
+          speech: '哈囉！我是小園丁綠芽！你知道光合作用的總反應式嗎？水和二氧化碳經由太陽光能與葉綠體，會轉換成葡萄糖、氧氣與水！請特別注意：「水」在反應物和產物中都有出現喔！快來跟我一起做彩葉草葉片脫色與碘液澱粉檢驗！',
+          hint: '學習光反應、碳反應與隔水脫色四部曲',
+          focusPos: { x: -30, y: 12, z: 34 },
+          lookAtPos: { x: -32, y: 4.5, z: 25 },
+          recommendedTab: 'notes'
+        }
+      };
+      budGroup.add(budHitbox);
+      interactiveEntityList.push(budHitbox);
+      parentGroup.add(budGroup);
+
+      animUpdaters.push((elapsed) => {
+        pot.rotation.x = Math.sin(elapsed * 2.5) * 0.25;
+        head.rotation.y = Math.sin(elapsed * 2) * 0.15;
+      });
+
+      // 2. 活體生物：翩翩拍翅發光粉蝶 (Flutter Butterfly)
+      const butterflyGroup = new THREE.Group();
+      butterflyGroup.position.set(2.2, topY + 3.2, -0.5);
+
+      const bfBody = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 8), getClayMaterial(0x1e293b));
+      bfBody.rotation.x = Math.PI / 4;
+      butterflyGroup.add(bfBody);
+
+      // 左翅膀
+      const wingGeo = new THREE.PlaneGeometry(0.9, 0.9);
+      const wingMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        side: THREE.DoubleSide,
+        roughness: 0.5
+      });
+      const wingL = new THREE.Mesh(wingGeo, wingMat);
+      wingL.position.set(-0.45, 0.1, 0);
+      butterflyGroup.add(wingL);
+
+      // 右翅膀
+      const wingR = new THREE.Mesh(wingGeo, wingMat);
+      wingR.position.set(0.45, 0.1, 0);
+      butterflyGroup.add(wingR);
+
+      const bfHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.0, 2.0), new THREE.MeshBasicMaterial({ visible: false }));
+      bfHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'creature-2-3',
+          name: '翩翩發光粉蝶 拂綠',
+          islandKey: '2-3',
+          badge: '2-3 活體巡遊昆蟲',
+          avatarIcon: 'fa-solid fa-mosquito',
+          themeColor: '#38bdf8',
+          speech: '撲撲撲～！我在巨型葉片旁飛舞，聞到了滿滿的清新氧氣！這可是光反應分解水分子釋放出來的喔！只有保衛細胞和葉肉細胞才有葉綠體，表皮細胞透光保護是不會進行光合作用的！',
+          hint: '查看葉片微觀解剖表與會考遮光試題',
+          focusPos: { x: -30, y: 11, z: 32 },
+          lookAtPos: { x: -32, y: 5.0, z: 25 },
+          recommendedTab: 'quiz'
+        }
+      };
+      butterflyGroup.add(bfHitbox);
+      interactiveEntityList.push(bfHitbox);
+      parentGroup.add(butterflyGroup);
+
+      animUpdaters.push((elapsed) => {
+        // 高速拍翅
+        const flap = Math.sin(elapsed * 22) * 0.75;
+        wingL.rotation.y = flap;
+        wingR.rotation.y = -flap;
+
+        // 在葉片周圍環繞飛行
+        butterflyGroup.position.x = 2.0 + Math.cos(elapsed * 1.5) * 1.8;
+        butterflyGroup.position.z = -0.5 + Math.sin(elapsed * 1.5) * 1.8;
+        butterflyGroup.position.y = topY + 3.0 + Math.sin(elapsed * 3) * 0.4;
+      });
+
+      // 3. 活體保衛細胞氣孔寶寶 (Stoma Twin)
+      const stomaHitbox = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.8, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      stomaHitbox.position.set(-4.0, topY + 0.6, 3.4);
+      stomaHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'creature-2-3-stoma',
+          name: '氣孔保衛細胞 雙子',
+          islandKey: '2-3',
+          badge: '2-3 微觀活體細胞',
+          avatarIcon: 'fa-solid fa-eye',
+          themeColor: '#34d399',
+          speech: '呼～吸～！我們是成對半月形的保衛細胞！我們內側細胞壁較厚，吸水膨脹時會彎曲拉開氣孔，讓二氧化碳進入、水分與氧氣釋出；缺水時就閉合防脫水！是整片表皮上少數有葉綠體的明星細胞喔！',
+          hint: '查看保衛細胞顯微鏡觀察與水蘊草實驗',
+          focusPos: { x: -34, y: 9, z: 32 },
+          lookAtPos: { x: -32, y: 4.5, z: 25 },
+          recommendedTab: 'steala'
+        }
+      };
+      interactiveEntityList.push(stomaHitbox);
+      parentGroup.add(stomaHitbox);
+    }
+
+    // (D) 2-4 消化島：消化探險家隊長漢克 (Hank) + 波浪水螅 (Hydra) + 微血管小兵
+    function createIsland24Actors(parentGroup) {
+      const topY = 3.6;
+
+      // 1. 人物：消化探險家 隊長漢克
+      const hankGroup = new THREE.Group();
+      hankGroup.position.set(-2.2, topY + 0.2, 1.6);
+      hankGroup.rotation.y = 0.5;
+
+      const head = new THREE.Mesh(GeoCache.chibiHead, getClayMaterial(0xffedd5));
+      head.position.y = 1.8;
+      hankGroup.add(head);
+
+      // 探險家安全帽
+      const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.95, 14, 14, 0, Math.PI * 2, 0, Math.PI / 2), getClayMaterial(0xf43f5e));
+      helmet.position.y = 2.1;
+      hankGroup.add(helmet);
+
+      const body = new THREE.Mesh(GeoCache.chibiBody, getClayMaterial(0x881337));
+      body.position.y = 0.95;
+      hankGroup.add(body);
+
+      // 揮手手臂
+      const waveArm = new THREE.Mesh(GeoCache.chibiLimb, getClayMaterial(0xffedd5));
+      waveArm.position.set(0.65, 1.25, 0.2);
+      waveArm.rotation.z = Math.PI / 4;
+      hankGroup.add(waveArm);
+
+      const hankHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      hankHitbox.position.y = 1.5;
+      hankHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'char-2-4',
+          name: '消化探險家 隊長漢克',
+          islandKey: '2-4',
+          badge: '2-4 核心人物導師',
+          avatarIcon: 'fa-solid fa-compass',
+          themeColor: '#f43f5e',
+          speech: '隊員集合！我是隊長漢克！人體消化道長達 9 公尺，是一條單向通行的管狀單行道！口腔唾液分解澱粉、胃液鹽酸殺菌初步分解蛋白質，而胰液酵素最齊全！最常考的陷阱是：肝臟分泌的膽汁「不含任何酵素」，只負責物理乳化脂質！快進來跟我一起看內視鏡解說！',
+          hint: '學習五大消化腺對照表與消化道旅程',
+          focusPos: { x: 30, y: 12, z: 34 },
+          lookAtPos: { x: 32, y: 4.5, z: 25 },
+          recommendedTab: 'notes'
+        }
+      };
+      hankGroup.add(hankHitbox);
+      interactiveEntityList.push(hankHitbox);
+      parentGroup.add(hankGroup);
+
+      animUpdaters.push((elapsed) => {
+        waveArm.rotation.z = Math.PI / 4 + Math.sin(elapsed * 5) * 0.35;
+        head.rotation.x = Math.sin(elapsed * 2) * 0.12;
+      });
+
+      // 2. 活體生物：原始囊狀消化腔 波浪水螅 (Hydra Poly)
+      const hydraGroup = new THREE.Group();
+      hydraGroup.position.set(2.2, topY + 0.2, -1.8);
+
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 1.8, 8), getClayMaterial(0x38bdf8));
+      stalk.position.y = 0.9;
+      hydraGroup.add(stalk);
+
+      // 5 條波浪起伏觸手
+      const tentacles = [];
+      for (let i = 0; i < 5; i++) {
+        const ang = (i / 5) * Math.PI * 2;
+        const tent = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 1.4, 6), getClayMaterial(0x67e8f9));
+        tent.position.set(Math.cos(ang) * 0.4, 1.8, Math.sin(ang) * 0.4);
+        tent.rotation.z = 0.4;
+        tent.rotation.y = ang;
+        hydraGroup.add(tent);
+        tentacles.push(tent);
+      }
+
+      const hydraHitbox = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.0, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
+      hydraHitbox.position.y = 1.4;
+      hydraHitbox.userData = {
+        isEntity: true,
+        entityData: {
+          id: 'creature-2-4-hydra',
+          name: '波浪觸手水螅 波波',
+          islandKey: '2-4',
+          badge: '2-4 原始囊狀消化生物',
+          avatarIcon: 'fa-solid fa-water',
+          themeColor: '#0284c7',
+          speech: '啵嚕啵嚕～！我是生長在水裡的腔腸動物水螅！我的消化構造叫做「囊狀消化腔」，只有一個開口兼具口與肛門功能，食物進出都在同一個孔！跟你們人類有口有肛門、精細分工的管狀消化道完全不一樣喔！',
+          hint: '查看消化道演化對比與動物食性適應',
+          focusPos: { x: 34, y: 10, z: 32 },
+          lookAtPos: { x: 32, y: 4.5, z: 25 },
+          recommendedTab: 'quiz'
+        }
+      };
+      hydraGroup.add(hydraHitbox);
+      interactiveEntityList.push(hydraHitbox);
+      parentGroup.add(hydraGroup);
+
+      animUpdaters.push((elapsed) => {
+        tentacles.forEach((tent, i) => {
+          tent.rotation.x = Math.sin(elapsed * 3.5 + i * 1.2) * 0.35;
+        });
+        stalk.position.y = 0.9 + Math.sin(elapsed * 2) * 0.08;
+      });
+
+      // 3. 活體微觀生物：絨毛微血管小兵 (Capillary Soldier)
+      const bloodCell = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 12), getClayMaterial(0xef4444, 0.4, 0xb91c1c));
+      bloodCell.position.set(3.4, topY + 1.2, 1.6);
+      parentGroup.add(bloodCell);
+
+      animUpdaters.push((elapsed) => {
+        bloodCell.position.x = 3.4 + Math.cos(elapsed * 2.5) * 1.5;
+        bloodCell.position.z = 1.6 + Math.sin(elapsed * 2.5) * 1.5;
+        bloodCell.position.y = topY + 1.2 + Math.sin(elapsed * 5) * 0.25;
+      });
+    }
+
+    /* --------------------------------------------------------------------------
+       2.6 輔助組件 (樹、蘑菇、水晶、雲朵)
        -------------------------------------------------------------------------- */
     function createClayTree(foliageColor, trunkColor, scale = 1, px = 0, py = 0, pz = 0) {
       const treeGroup = new THREE.Group();
@@ -1704,32 +2202,6 @@
       return cGroup;
     }
 
-    // 巡航探險家 Chibi 小人
-    function createExplorerChibi() {
-      explorerChibi = new THREE.Group();
-
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16), getClayMaterial(0xffedd5, 0.88));
-      head.position.y = 1.7;
-      explorerChibi.add(head);
-
-      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.4, 16), getClayMaterial(0xf59e0b, 0.88));
-      hat.position.y = 2.25;
-      explorerChibi.add(hat);
-
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.95, 12), getClayMaterial(0x3b82f6, 0.9));
-      body.position.y = 0.85;
-      explorerChibi.add(body);
-
-      const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.4), getClayMaterial(0xef4444, 0.9));
-      backpack.position.set(0, 0.9, -0.48);
-      explorerChibi.add(backpack);
-
-      explorerChibi.scale.set(1.15, 1.15, 1.15);
-      explorerChibi.position.set(-3.5, 6.4, 4.2);
-      scene.add(explorerChibi);
-    }
-
-    // 漂浮黏土雲朵
     function createAtmosphericClouds() {
       cloudsGroup = new THREE.Group();
       const cloudMat = getClayMaterial(0xffffff, 0.95);
@@ -1752,7 +2224,7 @@
     }
 
     /* --------------------------------------------------------------------------
-       2.6 動畫主迴圈 (Delta Time 幀率平滑與鏡頭阻尼插值)
+       2.7 動畫主迴圈 (Delta Time 幀率平滑與鏡頭阻尼插值)
        -------------------------------------------------------------------------- */
     function animate() {
       requestAnimationFrame(animate);
@@ -1760,7 +2232,7 @@
       const delta = clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
-      // (A) 行星自轉與公轉 (依賴 delta time，不受 144Hz 衝速影響)
+      // (A) 行星自轉與公轉
       planets.forEach((p) => {
         p.angle += p.speed * 0.4 * solarSpeedFactor * delta * 60;
         p.mesh.position.x = Math.cos(p.angle) * p.dist;
@@ -1786,13 +2258,12 @@
         cloudsGroup.rotation.y += 0.0008 * delta * 60;
       }
 
-      // (D) Chibi 小人呼吸感跳躍
-      if (explorerChibi) {
-        explorerChibi.position.y = 6.4 + Math.sin(elapsed * 4) * 0.18;
-        explorerChibi.rotation.y = Math.sin(elapsed * 2) * 0.35;
+      // (D) 執行島上所有人物與活體生物的平滑動畫週期
+      for (let i = 0; i < animUpdaters.length; i++) {
+        animUpdaters[i](elapsed);
       }
 
-      // (E) 鏡頭平滑指數阻尼插值 (Exponential Smoothing)
+      // (E) 鏡頭平滑指數阻尼插值
       if (cameraTargetPos) {
         const factor = 1 - Math.exp(-4.5 * delta);
         camera.position.lerp(cameraTargetPos, factor);
@@ -1821,57 +2292,108 @@
     }
 
     /* --------------------------------------------------------------------------
-       2.7 射線拾取與互動控制 (Raycasting & Hover Effect)
+       2.8 射線拾取：支援島嶼、人物與活體生物點選互動
        -------------------------------------------------------------------------- */
     function onScenePointerMove(event) {
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(islandPickList, false);
 
-      if (intersects.length > 0) {
+      // 優先檢測活體人物與生物
+      const entityIntersects = raycaster.intersectObjects(interactiveEntityList, false);
+      if (entityIntersects.length > 0) {
         container.style.cursor = 'pointer';
-        const hit = intersects[0].object;
-        if (hoveredMesh !== hit) {
-          if (hoveredMesh && hoveredMesh.scale) hoveredMesh.scale.set(1, 1, 1);
-          hoveredMesh = hit;
-          if (hit.userData.id !== 'center') {
-            hit.scale.set(1.03, 1.05, 1.03);
-          }
-        }
+        return;
+      }
+
+      // 次優先檢測島嶼頂部
+      const islandIntersects = raycaster.intersectObjects(islandPickList, false);
+      if (islandIntersects.length > 0) {
+        container.style.cursor = 'pointer';
       } else {
         container.style.cursor = 'grab';
-        if (hoveredMesh && hoveredMesh.scale) {
-          hoveredMesh.scale.set(1, 1, 1);
-          hoveredMesh = null;
-        }
       }
     }
 
     function onScenePointerDown(event) {
-      if (event.button !== 0) return; // 僅回應滑鼠左鍵
+      if (event.button !== 0) return;
 
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(islandPickList, false);
 
-      if (intersects.length > 0) {
-        const hit = intersects[0].object;
+      // 1. 優先判斷人物或活體生物點擊
+      const entityIntersects = raycaster.intersectObjects(interactiveEntityList, false);
+      if (entityIntersects.length > 0) {
+        const hit = entityIntersects[0].object;
+        if (hit.userData && hit.userData.entityData) {
+          SoundFX.playCharacterVoice();
+          focusOnEntity(hit.userData.entityData);
+          return;
+        }
+      }
+
+      // 2. 次判斷島嶼底座點擊
+      const islandIntersects = raycaster.intersectObjects(islandPickList, false);
+      if (islandIntersects.length > 0) {
+        const hit = islandIntersects[0].object;
         const islandId = hit.userData.id;
         if (islandId && islandId !== 'center') {
           SoundFX.playClick();
+          closeEntityDialogue();
           zoomToIsland(islandId);
         }
       }
     }
 
+    // 聚焦特定人物或生物，彈出專屬導師對話卡
+    function focusOnEntity(entityData) {
+      currentSelectedEntity = entityData;
+      currentFocusIsland = entityData.islandKey;
+
+      // 鏡頭無人機特寫滑翔
+      cameraTargetPos = new THREE.Vector3(entityData.focusPos.x, entityData.focusPos.y, entityData.focusPos.z);
+      lookTargetPos = new THREE.Vector3(entityData.lookAtPos.x, entityData.lookAtPos.y, entityData.lookAtPos.z);
+
+      // 填充對話卡
+      document.getElementById('card-badge').innerText = entityData.badge;
+      document.getElementById('card-name').innerText = entityData.name;
+      document.getElementById('card-speech').innerText = entityData.speech;
+      document.getElementById('card-hint').innerText = entityData.hint;
+      document.getElementById('card-avatar-icon').className = entityData.avatarIcon;
+      document.getElementById('card-avatar-wrap').style.backgroundColor = entityData.themeColor;
+
+      // 顯示對話卡並隱藏底端一般提示
+      document.getElementById('entity-dialogue-card').classList.remove('hidden');
+      document.getElementById('bottom-hint').classList.add('opacity-0');
+
+      confetti({
+        particleCount: 25,
+        spread: 45,
+        origin: { y: 0.85 }
+      });
+    }
+
+    function closeEntityDialogue() {
+      document.getElementById('entity-dialogue-card').classList.add('hidden');
+      document.getElementById('bottom-hint').classList.remove('opacity-0');
+    }
+
+    function openLearningFromEntity() {
+      if (!currentSelectedEntity) return;
+      const key = currentSelectedEntity.islandKey;
+      const tab = currentSelectedEntity.recommendedTab || 'notes';
+      closeEntityDialogue();
+      openLessonPanel(key);
+      switchTab(tab);
+    }
+
     function zoomToIsland(islandKey) {
       currentFocusIsland = islandKey;
+      closeEntityDialogue();
 
-      // 更新導航列高亮外觀
       ['home', '2-1', '2-2', '2-3', '2-4'].forEach((k) => {
         const btn = document.getElementById(`nav-btn-${k}`);
         if (!btn) return;
@@ -1894,21 +2416,15 @@
       const info = CHAPTER_DATA[islandKey];
       if (!info) return;
 
-      // 鏡頭滑翔至該島嶼上方聚焦
       cameraTargetPos = new THREE.Vector3(info.cameraPos.x, info.cameraPos.y, info.cameraPos.z);
       lookTargetPos = new THREE.Vector3(info.islandPos.x, info.islandPos.y + 4.2, info.islandPos.z);
 
-      // 移動小探險家前往拜訪
-      if (explorerChibi) {
-        explorerChibi.position.set(info.islandPos.x + 3.6, info.islandPos.y + 4.0, info.islandPos.z + 4.2);
-      }
-
-      // 開啟課程抽屜面板
       openLessonPanel(islandKey);
     }
 
     function onKeyDown(event) {
       if (event.key === 'Escape') {
+        closeEntityDialogue();
         closeLessonPanel();
       } else if (event.key === '0' || event.key === '`') {
         zoomToIsland('home');
@@ -1964,21 +2480,16 @@
       const panel = document.getElementById('lesson-panel');
       const data = CHAPTER_DATA[islandKey];
 
-      // 標題資訊
       document.getElementById('panel-badge').innerText = data.badge;
       document.getElementById('panel-title').innerText = data.title;
       document.getElementById('panel-icon').className = data.icon;
       document.getElementById('panel-icon-wrap').style.backgroundColor = data.themeColor;
 
-      // 頁碼指示器
       const keys = ['2-1', '2-2', '2-3', '2-4'];
       const curIdx = keys.indexOf(islandKey) + 1;
       document.getElementById('panel-page-indicator').innerText = `單元 ${curIdx} / 4`;
 
-      // 載入當前分頁
       switchTab(activeTab);
-
-      // 滑出抽屜
       panel.classList.remove('translate-x-full');
     }
 
@@ -2008,7 +2519,6 @@
       const data = CHAPTER_DATA[activeLessonId];
       const area = document.getElementById('panel-content-area');
 
-      // 更新 Tab 樣式
       ['notes', 'quiz', 'video', 'steala'].forEach((t) => {
         const btn = document.getElementById(`tab-${t}`);
         if (!btn) return;
@@ -2019,7 +2529,6 @@
         }
       });
 
-      // 渲染分頁內容
       if (tabKey === 'notes') {
         area.innerHTML = data.notes;
       } else if (tabKey === 'quiz') {
@@ -2031,7 +2540,6 @@
       }
     }
 
-    // 歷屆會考素養題庫渲染
     function renderQuizView(quizList) {
       const area = document.getElementById('panel-content-area');
       let html = `
@@ -2069,7 +2577,6 @@
 
         html += `
             </div>
-            <!-- 考題解析破題精要隱藏盒 -->
             <div id="analysis-box-${qIdx}" class="hidden p-3.5 rounded-xl bg-slate-950/90 border border-amber-500/35 text-xs space-y-1.5 animate-fadeIn">
               <div class="font-bold text-amber-400 flex items-center gap-1.5">
                 <i class="fa-solid fa-lightbulb"></i> 名師破題破局密笈
@@ -2088,7 +2595,6 @@
       const quiz = CHAPTER_DATA[activeLessonId].quiz[qIdx];
       const isCorrect = (selectedOptIdx === quiz.correct);
 
-      // 禁用題目按鈕
       quiz.options.forEach((_, optIdx) => {
         const btn = document.getElementById(`opt-btn-${qIdx}-${optIdx}`);
         btn.disabled = true;
@@ -2103,11 +2609,9 @@
         }
       });
 
-      // 展開詳解
       const analysisBox = document.getElementById(`analysis-box-${qIdx}`);
       analysisBox.classList.remove('hidden');
 
-      // 音效與彩花
       if (isCorrect) {
         SoundFX.playCorrect();
         confetti({
@@ -2120,12 +2624,10 @@
       }
     }
 
-    // 影音課堂分頁渲染
     function renderVideoView(videoData) {
       const area = document.getElementById('panel-content-area');
       let html = `
         <div class="space-y-4">
-          <!-- 影音播放器模擬視窗 -->
           <div class="relative w-full aspect-video rounded-2xl overflow-hidden bg-slate-950 border border-white/20 shadow-2xl flex items-center justify-center group">
             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent"></div>
             
@@ -2136,7 +2638,6 @@
               <div class="text-xs text-slate-300 font-semibold tracking-wide drop-shadow">${videoData.thumbnailDesc}</div>
             </div>
 
-            <!-- 控制底條 -->
             <div class="absolute bottom-0 inset-x-0 p-3 bg-slate-900/90 backdrop-blur-md flex items-center justify-between text-xs text-slate-300 border-t border-white/10">
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
@@ -2151,7 +2652,6 @@
             <p class="text-xs text-slate-400 mt-1">涵蓋補習班名師私房提點、3D 結構模擬動畫與實驗操作必考要點。</p>
           </div>
 
-          <!-- 精華單元時間標籤跳轉 -->
           <div class="space-y-2 pt-1">
             <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
               <i class="fa-solid fa-list-timeline"></i> 精華單元時間標籤 (點擊即時跳轉)
@@ -2185,7 +2685,6 @@
       confetti({ particleCount: 25, spread: 40 });
     }
 
-    // STELLA 跨領域自主探究分頁渲染 (S-T-E-A-LA 五大支柱)
     function renderStealaView(steala) {
       const area = document.getElementById('panel-content-area');
       const pillars = [
@@ -2240,7 +2739,6 @@
       setTimeout(() => toast.remove(), 4000);
     }
 
-    // 啟動 3D 渲染
     window.addEventListener('DOMContentLoaded', () => {
       initThree();
       animate();
