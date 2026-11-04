@@ -173,13 +173,7 @@
     </div>
   </header>
 
-  <!-- 底部操作提示條 -->
-  <div id="bottom-hint" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none text-center w-max max-w-[95vw]">
-    <div class="px-4 py-2 rounded-full bg-slate-950/95 border border-slate-700/90 text-xs sm:text-sm text-slate-100 flex items-center gap-2 shadow-2xl font-medium">
-      <i class="fa-solid fa-hand-pointer text-cyan-400"></i>
-      <span>直接點擊島上 <b>2-1～2-4 圖塊</b>、<b>動態人物（小玟/小槿/綠芽/漢克）</b>或<b>動態生物（松鼠/酵素/粉蝶/水螅）</b>，立即開啟<b>重點、評量與影音</b>！</span>
-    </div>
-  </div>
+  <!-- 底部操作提示條已依指示移除，保持畫面下方 100% 乾淨留白 -->
 
   <!-- 點擊島上人物或生物彈出之互動導航卡 (含直達：課程重點 / 會考評量 / 教學影音 / 互動實驗) -->
   <div id="mentor-dialogue-card" class="fixed bottom-16 left-4 sm:left-6 z-30 w-[92vw] sm:w-[440px] glassmorphism rounded-2xl p-4 border border-cyan-400/40 shadow-2xl hidden">
@@ -667,16 +661,34 @@
           }
         ],
         video: {
-          title: "自然2-1實驗破解食物隱藏糖分！兩個必學的醣類實測",
-          file: "自然2-1實驗破解食物隱藏糖分！兩個必學的醣類實測.mp4",
-          altFile: "自然2-1生物段考秘笈：食物中的養分與能量.mp4",
-          duration: "08:15",
-          thumbnailDesc: "米飯 vs 芭樂之碘液澱粉檢驗與本氏液隔水加熱呈色光譜",
+          title: "自然2-1 雙影片教學專區（實驗解析 ╳ 段考秘笈）",
+          file: "videos/v2_1_1.mp4",
+          altFile: "videos/v2_1_2.mp4",
+          duration: "雙部完整版",
+          thumbnailDesc: "第1部：實驗破解食物隱藏糖分（醣類實測）｜第2部：生物段考秘笈（食物中的養分與能量）",
+          list: [
+            {
+              id: "v2_1_1",
+              badge: "🎬 影片一（實驗解析）",
+              title: "自然2-1實驗破解食物隱藏糖分！兩個必學的醣類實測",
+              src: "videos/v2_1_1.mp4",
+              poster: "images/2-1_exp1.jpg",
+              desc: "實測米飯與芭樂之碘液澱粉檢驗（黃褐→藍黑）與本氏液隔水加熱呈色（藍→綠→黃→橙→紅）"
+            },
+            {
+              id: "v2_1_2",
+              badge: "🎬 影片二（段考秘笈）",
+              title: "自然2-1生物段考秘笈：食物中的養分與能量",
+              src: "videos/v2_1_2.mp4",
+              poster: "images/2-1_nutrients_guide.png",
+              desc: "六大營養素熱量計算（4-4-9口訣）、基礎代謝率、花生燃燒卡計實驗與維生素缺乏症完整總複習"
+            }
+          ],
           timestamps: [
-            { time: "00:45", label: "六大營養素產能與基礎代謝率概念" },
-            { time: "02:20", label: "卡計熱量測定：花生燃燒水溫變化實測" },
-            { time: "04:10", label: "碘液檢驗澱粉操作與黃褐轉藍黑反應" },
-            { time: "06:15", label: "本氏液半定量色彩梯度（藍綠黃橙紅）" }
+            { time: "00:15", vIdx: 0, label: "【影片一】碘液檢驗澱粉操作與黃褐轉藍黑反應" },
+            { time: "01:10", vIdx: 0, label: "【影片一】本氏液隔水加熱半定量色彩梯度（藍綠黃橙紅）" },
+            { time: "00:30", vIdx: 1, label: "【影片二】六大營養素產能（脂9、醣4、蛋白4）與基礎代謝率" },
+            { time: "02:15", vIdx: 1, label: "【影片二】卡計熱量測定與維生素、礦物質缺乏症口訣" }
           ]
         },
         steala: {
@@ -807,16 +819,34 @@
           }
         ],
         video: {
-          title: "自然2-2酵素實驗：為什麼煮沸的口水沒用了？",
-          file: "自然2-2酵素實驗：為什麼煮沸的口水沒用了？.mp4",
-          altFile: "自然2-2：酵素的作用與實驗.mp4",
-          duration: "06:40",
-          thumbnailDesc: "3D 分子結構拆解：受質與酵素活性位專一性結合與高溫變性",
+          title: "自然2-2 雙影片教學專區（煮沸口水實驗 ╳ 酵素作用全攻略）",
+          file: "videos/v2_2_1.mp4",
+          altFile: "videos/v2_2_2.mp4",
+          duration: "雙部完整版",
+          thumbnailDesc: "第1部：酵素實驗（為什麼煮沸的口水沒用了？）｜第2部：酵素的作用與實驗完整解析",
+          list: [
+            {
+              id: "v2_2_1",
+              badge: "🎬 影片一（核心實驗）",
+              title: "自然2-2酵素實驗：為什麼煮沸的口水沒用了？",
+              src: "videos/v2_2_1.mp4",
+              poster: "images/2-2_exp1.jpg",
+              desc: "破解光熱變性：0℃冰水浴、37℃溫水浴與100℃煮沸唾液對澱粉分解與本氏液呈色影響"
+            },
+            {
+              id: "v2_2_2",
+              badge: "🎬 影片二（觀念與會考）",
+              title: "自然2-2：酵素的作用與實驗全解析",
+              src: "videos/v2_2_2.mp4",
+              poster: "images/2-2_enzyme_features.png",
+              desc: "合成與分解代謝、鎖與鑰匙專一性模型、溫度可逆與不可逆曲線、胃酸/唾液/小腸液 pH 曲線"
+            }
+          ],
           timestamps: [
-            { time: "00:40", label: "代謝作用：合成 vs 分解能量流動" },
-            { time: "02:10", label: "鎖與鑰匙模型：酵素活性位點立體構形" },
-            { time: "03:50", label: "煮沸口水實測：高溫熱變性不可逆實驗" },
-            { time: "05:15", label: "胃酸、唾液、小腸液 pH 最適活性曲線圖" }
+            { time: "00:15", vIdx: 0, label: "【影片一】煮沸口水實測：高溫蛋白質永久變性不可逆" },
+            { time: "01:05", vIdx: 0, label: "【影片一】三支試管加入本氏液隔水加熱顏色對決" },
+            { time: "00:35", vIdx: 1, label: "【影片二】代謝作用與鎖鑰模型：酵素活性位點專一性" },
+            { time: "02:30", vIdx: 1, label: "【影片二】胃蛋白酶(pH 2)、唾液(pH 7)、小腸胰液(pH 8)曲線" }
           ]
         },
         steala: {
@@ -961,16 +991,34 @@
           }
         ],
         video: {
-          title: "自然2-3光合作用實驗解析 & 植物養分密碼",
-          file: "自然2-3光合作用實驗解析.mp4",
-          altFile: "自然2-3植物養分密碼.mp4",
-          duration: "07:35",
-          thumbnailDesc: "彩葉草遮光與酒精隔水加熱脫色全紀錄、顯微鏡保衛細胞氣孔開閉",
+          title: "自然2-3 雙影片教學專區（光合作用實驗 ╳ 植物養分密碼）",
+          file: "videos/v2_3_1.mp4",
+          altFile: "videos/v2_3_2.mp4",
+          duration: "雙部完整版",
+          thumbnailDesc: "第1部：光合作用實驗解析（隔水加熱酒精脫色）｜第2部：植物養分密碼（葉片構造與雙階段）",
+          list: [
+            {
+              id: "v2_3_1",
+              badge: "🎬 影片一（實驗解析）",
+              title: "自然2-3光合作用實驗解析",
+              src: "videos/v2_3_1.mp4",
+              poster: "images/2-3_exp1.jpg",
+              desc: "鋁箔遮光對照、沸水軟化、隔水加熱酒精溶出葉綠素、熱水漂洗與滴加碘液藍黑色呈色全紀錄"
+            },
+            {
+              id: "v2_3_2",
+              badge: "🎬 影片二（觀念秘笈）",
+              title: "自然2-3植物養分密碼",
+              src: "videos/v2_3_2.mp4",
+              poster: "images/2-3_photosynthesis_guide.png",
+              desc: "葉片解剖構造（角質層、表皮、葉肉、保衛細胞、葉脈）與光反應、碳反應雙階段完整拆解"
+            }
+          ],
           timestamps: [
-            { time: "00:30", label: "葉片橫切面解剖：角質層、表皮、葉肉與葉脈" },
-            { time: "02:15", label: "光反應水裂解釋放氧氣微觀動態" },
-            { time: "04:10", label: "隔水酒精脫色操作技巧與安全規範" },
-            { time: "05:55", label: "碘液澱粉呈色與對照組遮光十字解析" }
+            { time: "00:20", vIdx: 0, label: "【影片一】隔水加熱酒精脫色操作技巧與安全防線" },
+            { time: "01:30", vIdx: 0, label: "【影片一】碘液澱粉呈色與鋁箔遮光對照組結果" },
+            { time: "00:30", vIdx: 1, label: "【影片二】葉片橫切面構造：保衛細胞與葉肉細胞含葉綠體" },
+            { time: "02:20", vIdx: 1, label: "【影片二】光反應分解水釋氧 vs 碳反應固定二氧化碳合成葡萄糖" }
           ]
         },
         steala: {
@@ -1140,16 +1188,34 @@
           }
         ],
         video: {
-          title: "自然2-4生物會考滿分衝刺：動物消化系統全解析",
-          file: "自然2-4生物會考滿分衝刺：動物消化系統.mp4",
-          altFile: "自然2-4生物會考滿分衝刺：動物消化系統.mp4",
-          duration: "08:50",
-          thumbnailDesc: "3D 內視鏡：食道蠕動、胃部研磨、膽汁胰液會師與小腸絨毛吸收",
+          title: "自然2-4 雙影片教學專區（會考滿分衝刺 ╳ 五大消化液實戰圖解）",
+          file: "videos/v2_4_1.mp4",
+          altFile: "videos/v2_4_2.mp4",
+          duration: "雙部完整版",
+          thumbnailDesc: "第1部：生物會考滿分衝刺（動物消化系統）｜第2部：人體消化道與五大消化液實戰圖解",
+          list: [
+            {
+              id: "v2_4_1",
+              badge: "🎬 影片一（會考滿分衝刺）",
+              title: "自然2-4生物會考滿分衝刺：動物消化系統",
+              src: "videos/v2_4_1.mp4",
+              poster: "images/2-4_digestion_all.png",
+              desc: "囊狀消化腔 vs 管狀消化道演化、消化管與消化腺區別、小腸絨毛吸收與歷屆會考必考題精講"
+            },
+            {
+              id: "v2_4_2",
+              badge: "🎬 影片二（五大消化液圖解）",
+              title: "自然2-4人體消化道與五大消化液實戰圖解",
+              src: "videos/v2_4_2.mp4",
+              poster: "images/2-4_human_digestion.png",
+              desc: "唾液、胃液、膽汁（無酵素物理乳化）、胰液（三大養分全能分解）與腸液協同作用全圖解"
+            }
+          ],
           timestamps: [
-            { time: "00:45", label: "單向管狀消化道 vs 水螅囊狀消化腔演化" },
-            { time: "02:30", label: "胃腺胃酸殺菌與胃蛋白酶酸性催化" },
-            { time: "04:50", label: "肝膽胰會師十二指腸：膽汁乳化與胰液全能分解" },
-            { time: "07:15", label: "小腸絨毛微血管與乳糜管吸收途徑比較" }
+            { time: "00:30", vIdx: 0, label: "【影片一】單向管狀消化道 vs 水螅囊狀消化腔演化" },
+            { time: "02:20", vIdx: 0, label: "【影片一】小腸指狀絨毛增加吸收表面積與排遺定義" },
+            { time: "00:10", vIdx: 1, label: "【影片二】消化道順序與附屬消化腺（肝、膽、胰不走食物）" },
+            { time: "00:45", vIdx: 1, label: "【影片二】五大消化液對決：膽汁乳化脂質 vs 胰液全能分解" }
           ]
         },
         steala: {
@@ -2231,14 +2297,45 @@
       closeMentorCard();
     }
 
+    function pauseAllVideos() {
+      [0, 1].forEach(i => {
+        const vp = document.getElementById(`unit-video-player-${i}`);
+        if (vp && !vp.paused) vp.pause();
+      });
+    }
+
+    function onVideoPlay(activeIdx) {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      [0, 1].forEach(i => {
+        if (i !== activeIdx) {
+          const vp = document.getElementById(`unit-video-player-${i}`);
+          if (vp && !vp.paused) vp.pause();
+        }
+      });
+    }
+
+    function playUnitVideo(idx) {
+      SoundFX.playClick();
+      const card = document.getElementById(`video-card-${idx}`);
+      const player = document.getElementById(`unit-video-player-${idx}`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (player) {
+        player.play().catch(() => {});
+      }
+    }
+
     function closeDrawer() {
       SoundFX.playClick();
+      pauseAllVideos();
       const drawer = document.getElementById('lesson-drawer');
       if (drawer) drawer.classList.add('translate-x-[120%]');
     }
 
     function switchTab(tabName) {
       SoundFX.playClick();
+      if (tabName !== 'video') {
+        pauseAllVideos();
+      }
       const tabs = ['notes', 'quiz', 'video', 'lab', 'steala'];
       tabs.forEach(t => {
         const btn = document.getElementById(`tab-btn-${t}`);
@@ -2346,48 +2443,83 @@
         quizList.appendChild(card);
       });
 
-      // 4. 教學影片專區（支援本機 MP4 載入與雲端互動時間軸導讀）
+      // 4. 教學影片專區（每節完整連結 2 部高清 MP4 教學影片，支援直接播放、切換與時間軸跳轉）
       const v = unit.video;
+      const vList = v.list || [];
       document.getElementById('video-box').innerHTML = `
-        <div class="rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 shadow-xl">
-          <div class="relative aspect-video bg-slate-900 flex flex-col items-center justify-center p-2 text-center">
-            <video id="unit-video-player" class="w-full h-full object-contain rounded-lg" controls poster="images/${unitCode === '2-1' ? '2-1_exp1.jpg' : unitCode === '2-2' ? '2-2_exp1.jpg' : unitCode === '2-3' ? '2-3_exp1.jpg' : '2-4_digestion_all.png'}">
-              <source src="${v.file}" type="video/mp4">
-              <source src="${v.altFile}" type="video/mp4">
-            </video>
+        <div class="space-y-4">
+          <!-- 雙影片快速播放切換列 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            ${vList.map((item, idx) => `
+              <button onclick="playUnitVideo(${idx})" class="p-3 rounded-2xl bg-slate-900 hover:bg-blue-950/80 border ${idx === 0 ? 'border-cyan-400/70' : 'border-rose-400/70'} text-left transition flex items-center justify-between gap-2 shadow-lg">
+                <div>
+                  <span class="text-xs font-extrabold ${idx === 0 ? 'text-cyan-300' : 'text-rose-300'} block">${item.badge}（點擊立即播放）</span>
+                  <span class="text-xs sm:text-sm font-bold text-white line-clamp-1 mt-0.5">${item.title}</span>
+                </div>
+                <span class="w-9 h-9 rounded-xl ${idx === 0 ? 'bg-cyan-500 text-slate-950' : 'bg-rose-500 text-white'} flex items-center justify-center shrink-0 shadow-md">
+                  <i class="fa-solid fa-play text-sm"></i>
+                </span>
+              </button>
+            `).join('')}
           </div>
-          <div class="p-3.5 bg-slate-900 border-t border-slate-700 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div class="text-xs sm:text-sm font-bold text-cyan-300 flex items-center gap-1.5">
-                <i class="fa-solid fa-clapperboard"></i> ${v.title}
+
+          <!-- 第 1 部與第 2 部教學影片播放器卡片 -->
+          ${vList.map((item, idx) => `
+            <div id="video-card-${idx}" class="rounded-2xl overflow-hidden bg-slate-950 border ${idx === 0 ? 'border-cyan-400/50' : 'border-rose-400/50'} shadow-xl">
+              <div class="px-3.5 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold ${idx === 0 ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/40' : 'bg-rose-500/25 text-rose-200 border border-rose-400/40'}">${item.badge}</span>
+                  <span class="text-xs sm:text-sm font-bold text-white">${item.title}</span>
+                </div>
+                <a href="${item.src}" target="_blank" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold flex items-center gap-1 shrink-0 border border-slate-600">
+                  <i class="fa-solid fa-up-right-from-square"></i> 全螢幕直開
+                </a>
               </div>
-              <div class="text-xs text-slate-300 mt-0.5">${v.thumbnailDesc}（片長 ${v.duration}）</div>
+              <div class="relative aspect-video bg-black flex items-center justify-center">
+                <video id="unit-video-player-${idx}" class="w-full h-full object-contain" controls preload="metadata" playsinline poster="${item.poster}" onplay="onVideoPlay(${idx})">
+                  <source src="${item.src}" type="video/mp4">
+                  您的瀏覽器不支援 HTML5 影片播放。
+                </video>
+              </div>
+              <div class="p-3 bg-slate-900/95 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs text-slate-200">${item.desc}</p>
+                <button onclick="playUnitVideo(${idx})" class="px-3 py-1.5 rounded-xl ${idx === 0 ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-rose-600 hover:bg-rose-500'} text-white text-xs font-bold flex items-center gap-1.5 transition shrink-0">
+                  <i class="fa-solid fa-circle-play"></i> 播放此部影片
+                </button>
+              </div>
             </div>
-            <button onclick="speakCurrentNotes()" class="px-3 py-1.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-400/50 text-white text-xs font-bold flex items-center gap-1.5 transition">
-              <i class="fa-solid fa-volume-high"></i> 名師語音精講
-            </button>
-          </div>
+          `).join('')}
         </div>
       `;
 
       const tsContainer = document.getElementById('video-timestamps');
       tsContainer.innerHTML = '';
       v.timestamps.forEach(ts => {
+        const vIdx = ts.vIdx || 0;
         const row = document.createElement('div');
         row.className = 'p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600/60 flex items-center justify-between text-xs sm:text-sm cursor-pointer transition';
         row.innerHTML = `
-          <span class="text-white font-medium"><i class="fa-solid fa-play text-cyan-400 mr-2 text-xs"></i>${ts.label}</span>
+          <span class="text-white font-medium"><i class="fa-solid fa-play ${vIdx === 0 ? 'text-cyan-400' : 'text-rose-400'} mr-2 text-xs"></i>${ts.label}</span>
           <span class="px-2 py-0.5 rounded bg-blue-500/25 text-cyan-200 font-mono text-xs font-bold">${ts.time}</span>
         `;
         row.onclick = () => {
           SoundFX.playClick();
-          const player = document.getElementById('unit-video-player');
-          if (player && player.readyState > 0) {
+          const player = document.getElementById(`unit-video-player-${vIdx}`);
+          const card = document.getElementById(`video-card-${vIdx}`);
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (player) {
             const parts = ts.time.split(':');
-            player.currentTime = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-            player.play();
-          } else {
-            SoundFX.speak(`${ts.label}。${unit.voiceSummary}`);
+            const targetSec = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+            const startSeekAndPlay = () => {
+              try { player.currentTime = targetSec; } catch (e) {}
+              player.play().catch(() => {});
+            };
+            if (player.readyState >= 1) {
+              startSeekAndPlay();
+            } else {
+              player.addEventListener('loadedmetadata', startSeekAndPlay, { once: true });
+              player.load();
+            }
           }
         };
         tsContainer.appendChild(row);
