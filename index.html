@@ -75,13 +75,15 @@
       position: absolute;
       top: 0;
       left: 0;
-      transform: translate(-50%, -100%);
+      will-change: transform;
+      transform: translate3d(-9999px, -9999px, 0) translate(-50%, -100%);
       pointer-events: auto;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
       z-index: 15;
+      touch-action: manipulation;
     }
 
     .pin-card {
@@ -1477,19 +1479,24 @@
     let animatedChars = [];
     let animatedCreatures = [];
     let floatingParticles;
-    let targetCamPos = null;
-    let targetLookAt = null;
+    const _targetCamPos = new THREE.Vector3(0, 54, 106);
+    const _targetLookAt = new THREE.Vector3(0, 2, 0);
+    let isCamTransitioning = false;
     let currentUnitKey = '2-1';
     let currentEntityDialogue = '';
     let pinsVisible = true;
     const billboardPins = [];
     const answeredQuizzes = new Set();
 
-    // 預先配置常駐運算向量（Zero-GC Render Loop：嚴禁在 animate 迴圈中 new THREE.Vector3）
+    // 預先配置常駐運算向量（Zero-GC Render Loop：嚴禁在 animate 迴圈與互動中 new THREE.Vector3）
     const _projVec = new THREE.Vector3();
     const _rayMouse = new THREE.Vector2();
     const _raycaster = new THREE.Raycaster();
+    const _v1 = new THREE.Vector3();
+    const _v2 = new THREE.Vector3();
+    const _v3 = new THREE.Vector3();
     let _pointerDownPos = { x: 0, y: 0 };
+    let _pointerMoveScheduled = false;
 
     // 幾何與材質全域單例快取池 (Geometry & Material Singleton Cache)
     const GeoCache = {};
@@ -1640,13 +1647,12 @@
         }
       }
 
-      // 第三步：整數像素寫入 DOM（杜絕次像素模糊）
+      // 第三步：GPU 著色器硬體加速位移寫入（零重排 Reflow，杜絕字體次像素模糊）
       for (let i = 0; i < billboardPins.length; i++) {
         const pin = billboardPins[i];
         if (!pin.visible) continue;
         pin.el.style.display = 'flex';
-        pin.el.style.left = `${Math.round(pin.sx)}px`;
-        pin.el.style.top = `${Math.round(pin.sy)}px`;
+        pin.el.style.transform = `translate3d(${Math.round(pin.sx)}px, ${Math.round(pin.sy)}px, 0) translate(-50%, -100%)`;
       }
     }
 
@@ -1685,7 +1691,7 @@
       renderer.outputEncoding = THREE.sRGBEncoding;
       container.appendChild(renderer.domElement);
 
-      // 4. 控制器 (OrbitControls)
+      // 4. 控制器 (OrbitControls) - 完美支援行動裝置多點觸控手勢
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.06;
@@ -1693,10 +1699,21 @@
       controls.minDistance = 16;
       controls.maxDistance = 195;
       controls.target.set(0, 2, 0);
+      controls.touches = {
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
+      };
+      controls.enablePan = true;
+      renderer.domElement.style.touchAction = 'none';
 
-      // 初始化共用幾何體快取池
-      GeoCache.sphereLow = new THREE.SphereGeometry(1, 16, 16);
-      GeoCache.sphereMed = new THREE.SphereGeometry(1, 24, 24);
+      // 初始化幾何單例快取池 (擴充共用 VBO 減少 GPU 狀態切換)
+      GeoCache.sphereLow = new THREE.SphereGeometry(1, 14, 14);
+      GeoCache.sphereMed = new THREE.SphereGeometry(1, 22, 22);
+      GeoCache.sphereHigh = new THREE.SphereGeometry(1, 28, 28);
+      GeoCache.boxUnit = new THREE.BoxGeometry(1, 1, 1);
+      GeoCache.cylUnit = new THREE.CylinderGeometry(1, 1, 1, 16);
+      GeoCache.coneUnit = new THREE.ConeGeometry(1, 1, 12);
+      GeoCache.octaUnit = new THREE.OctahedronGeometry(1, 0);
       GeoCache.cylIslandTop = new THREE.CylinderGeometry(11.5, 9.8, 2.2, 32);
       GeoCache.cylIslandRock = new THREE.CylinderGeometry(9.6, 5.2, 5.5, 24);
       GeoCache.torusRing = new THREE.TorusGeometry(11.6, 0.25, 12, 48);
@@ -1866,15 +1883,17 @@
       // 連接中央與四座島嶼的發光能量節點橋
       const bridgeMat = getClayMat(0x38bdf8, 0.3, 0.1, 0x38bdf8, 0.45);
       Object.values(CHAPTER_DATA).forEach(unit => {
-        const start = new THREE.Vector3(0, 0.5, 0);
-        const end = new THREE.Vector3(unit.islandPos.x, 0.5, unit.islandPos.z);
+        _v1.set(0, 0.5, 0);
+        _v2.set(unit.islandPos.x, 0.5, unit.islandPos.z);
         for (let i = 1; i <= 5; i++) {
           const t = i / 6;
-          const pos = new THREE.Vector3().lerpVectors(start, end, t);
-          pos.y += Math.sin(t * Math.PI) * 2.5;
+          _v3.lerpVectors(_v1, _v2, t);
+          _v3.y += Math.sin(t * Math.PI) * 2.5;
           const dot = new THREE.Mesh(GeoCache.sphereLow, bridgeMat);
           dot.scale.setScalar(0.42);
-          dot.position.copy(pos);
+          dot.position.copy(_v3);
+          dot.updateMatrix();
+          dot.matrixAutoUpdate = false;
           scene.add(dot);
         }
       });
@@ -3055,13 +3074,12 @@
         floatingParticles.rotation.y = elapsed * 0.02;
       }
 
-      // 5. 攝影機平滑飛躍插值 (Smooth Camera Lerp)
-      if (targetCamPos && targetLookAt) {
-        camera.position.lerp(targetCamPos, 0.068);
-        controls.target.lerp(targetLookAt, 0.068);
-        if (camera.position.distanceTo(targetCamPos) < 0.35) {
-          targetCamPos = null;
-          targetLookAt = null;
+      // 5. 攝影機平滑飛躍插值 (Smooth Camera Lerp - 100% Zero-GC)
+      if (isCamTransitioning) {
+        camera.position.lerp(_targetCamPos, 0.068);
+        controls.target.lerp(_targetLookAt, 0.068);
+        if (camera.position.distanceTo(_targetCamPos) < 0.35) {
+          isCamTransitioning = false;
         }
       }
 
@@ -3075,15 +3093,22 @@ function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     }
 
-    // 滑鼠移動懸停游標回饋
+    // 滑鼠移動懸停游標回饋 (rAF 節流優化，防止電競高回報率滑鼠卡頓)
     function onPointerMove(event) {
       _rayMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       _rayMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      _raycaster.setFromCamera(_rayMouse, camera);
-      const intersects = _raycaster.intersectObjects(islandMeshes, true);
-      renderer.domElement.style.cursor = intersects.length > 0 ? 'pointer' : 'grab';
+      if (!_pointerMoveScheduled) {
+        _pointerMoveScheduled = true;
+        requestAnimationFrame(() => {
+          _pointerMoveScheduled = false;
+          _raycaster.setFromCamera(_rayMouse, camera);
+          const intersects = _raycaster.intersectObjects(islandMeshes, true);
+          renderer.domElement.style.cursor = intersects.length > 0 ? 'pointer' : 'grab';
+        });
+      }
     }
 
     function onPointerDown(event) {
@@ -3171,8 +3196,9 @@ function onWindowResize() {
         }
       });
 
-      targetCamPos = new THREE.Vector3(unit.cameraPos.x, unit.cameraPos.y, unit.cameraPos.z);
-      targetLookAt = new THREE.Vector3(unit.islandPos.x, 3.2, unit.islandPos.z);
+      _targetCamPos.set(unit.cameraPos.x, unit.cameraPos.y, unit.cameraPos.z);
+      _targetLookAt.set(unit.islandPos.x, 3.2, unit.islandPos.z);
+      isCamTransitioning = true;
 
       populateDrawer(unitCode);
       if (defaultTab) {
@@ -3186,8 +3212,9 @@ function onWindowResize() {
 
     function resetCameraOverview() {
       SoundFX.playWhoosh();
-      targetCamPos = new THREE.Vector3(0, 54, 106);
-      targetLookAt = new THREE.Vector3(0, 2, 0);
+      _targetCamPos.set(0, 54, 106);
+      _targetLookAt.set(0, 2, 0);
+      isCamTransitioning = true;
       closeDrawer();
       closeMentorCard();
     }
